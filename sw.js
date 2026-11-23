@@ -1,5 +1,5 @@
 // Офлайн-режим: застосунок відкривається навіть без інтернету.
-const V = 'bs-v2';
+const V = 'bs-v3';
 const CORE = ['./', './index.html', './firebase-config.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
@@ -9,6 +9,16 @@ self.addEventListener('activate', e => {
 });
 async function fromCache(req) {
   return (await caches.match(req)) || (await caches.match('./index.html'));
+}
+// Миттєвий запуск: віддаємо збережену копію одразу, а свіжу версію тихо завантажуємо у фоні.
+function cacheFirstRefresh(e) {
+  const req = e.request;
+  const refresh = fetch(req).then(r => {
+    if (r.ok) { const cl = r.clone(); caches.open(V).then(c => c.put(req, cl)); }
+    return r;
+  }).catch(() => null);
+  e.waitUntil(refresh.then(() => {}));
+  return caches.match(req).then(hit => hit || refresh.then(r => r || fromCache(req)).then(r => r || Response.error()));
 }
 function networkFirst(req) {
   return new Promise(resolve => {
@@ -37,5 +47,5 @@ self.addEventListener('fetch', e => {
     }));
     return;
   }
-  if (isApp) e.respondWith(networkFirst(e.request));
+  if (isApp) e.respondWith(cacheFirstRefresh(e));
 });
