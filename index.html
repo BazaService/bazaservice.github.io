@@ -288,17 +288,24 @@ nav.tabs a{position:relative}
 <div id="sheet-root"></div>
 
 <script type="module">
-import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
-import {getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut} from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
-import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc as fdoc,collection as fcol,setDoc,getDoc,onSnapshot as fsnap,writeBatch} from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import {firebaseConfig} from './firebase-config.js';
+let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
+const SDK='https://www.gstatic.com/firebasejs/11.0.2/';
+async function loadSdk(){
+  const [a,b,c,d]=await Promise.all([import(SDK+'firebase-app.js'),import(SDK+'firebase-auth.js'),import(SDK+'firebase-firestore.js'),import('./firebase-config.js')]);
+  ({initializeApp}=a);
+  ({getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut}=b);
+  ({initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc:fdoc,collection:fcol,setDoc,getDoc,onSnapshot:fsnap,writeBatch}=c);
+  ({firebaseConfig}=d);
+}
 (function(){
 "use strict";
 /* ---------- Firebase layer (replaces Claude runtime) ---------- */
 const FB={};
+function initFB(){
 FB.app=initializeApp(firebaseConfig);
 FB.auth=getAuth(FB.app);
 FB.fs=initializeFirestore(FB.app,{ignoreUndefinedProperties:true,localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
+}
 function writeErr(e){try{window.dispatchEvent(new CustomEvent('fb-write-error',{detail:e}));}catch(_){} }
 function mkDoc(path){const ref=fdoc(FB.fs,path);return{
   set(data){setDoc(ref,data).catch(writeErr);return Promise.resolve();},
@@ -998,6 +1005,7 @@ function closeSheet(){document.getElementById('sheet-root').innerHTML='';form=nu
 /* ---------- settings save ---------- */
 let cfgTimer=null;
 function saveCfg(next,now){
+  if(!db){toast('Зачекайте секунду, застосунок ще з\u2019єднується');return;}
   cfg=next;clearTimeout(cfgTimer);
   const go=async()=>{try{await db.doc('config/main').set(cfg);}catch(e){toast('Не вдалося зберегти налаштування');}};
   if(now)go();else cfgTimer=setTimeout(go,700);
@@ -1042,7 +1050,7 @@ document.addEventListener('click',async e=>{
     case 'opdel2':{const [d,id]=v.split('|');const before=cleanOp(findOp(v));el.disabled=true;try{await db.doc('days/'+d).update({ops:{[id]:{deleted:true,deletedBy:me.id,deletedTs:Date.now()}}});let logged=true;try{await logAudit('delete',id,before,null);}catch(e2){logged=false;}closeSheet();toast(logged?'Операцію видалено':'Видалено, але історію не записано');}catch(err){el.disabled=false;toast('Не вдалося видалити');}break;}
     case 'disp':ui.disp=v;try{localStorage.setItem('kasa.disp',v);}catch(e){}render();break;
     case 'login':doLogin();break;
-    case 'logout':signOut(FB.auth).then(()=>location.reload());break;
+    case 'logout':clearSnap();if(!FB.auth){location.reload();break;}signOut(FB.auth).then(()=>location.reload());break;
     case 'migrate':{const f=document.getElementById('mig-file');if(!f||!f.files||!f.files[0]){const st=document.getElementById('mig-status');if(st)st.textContent='Спочатку оберіть файл.';return;}el.disabled=true;await importData(f.files[0]);el.disabled=false;break;}
     case 'claimempty':el.disabled=true;await claimEmpty();break;
     case 'goaudit':location.hash='#zminy';break;
@@ -1113,19 +1121,19 @@ user={profiles:async ids=>{const r={};for(const i of ids){const m=members[i];r[i
 function startData(){
   if(dataStarted)return;dataStarted=true;
   const fail=e=>{console.warn(e);noDb=true;render(true);};
-  db.collection('members').onSnapshot(s=>{const n={};s.docs.forEach(d=>{n[d.id]=d.data()||{};});members=n;for(const k in n)names[k]=n[k].name||names[k]||'';resolveNames();if(ui.tab==='nalashtuvannia'&&!isTyping())render(true);},()=>{});
+  db.collection('members').onSnapshot(s=>{const n={};s.docs.forEach(d=>{n[d.id]=d.data()||{};});members=n;saveSnap();for(const k in n)names[k]=n[k].name||names[k]||'';resolveNames();if(ui.tab==='nalashtuvannia'&&!isTyping())render(true);},()=>{});
   db.doc('config/main').onSnapshot(s=>{
     const d=s.exists?s.data():null;
     cfg=d?Object.assign({},DEFAULT_CFG,d):null;
     if(cfg){for(const k of ['boxes','categories','incomeCategories','currencies'])if(!Array.isArray(cfg[k]))cfg[k]=DEFAULT_CFG[k].slice();if(!cfg.rates||typeof cfg.rates!=='object')cfg.rates={};}
-    cfgLoaded=true;resolveNames();if(isTyping()){const dyn=document.getElementById('dyn');if(dyn&&ui.tab!=='nalashtuvannia')render();}else render(true);if(form)updateHints();
+    cfgLoaded=true;saveSnap();resolveNames();if(isTyping()){const dyn=document.getElementById('dyn');if(dyn&&ui.tab!=='nalashtuvannia')render();}else render(true);if(form)updateHints();
   },fail);
   db.collection('clients').onSnapshot(s=>{
-    const n={};s.docs.forEach(d=>{const x=d.data();if(x)n[d.id]={name:x.name||'',archived:!!x.archived};});clients=n;
+    const n={};s.docs.forEach(d=>{const x=d.data();if(x)n[d.id]={name:x.name||'',archived:!!x.archived};});clients=n;saveSnap();
     clientsLoaded=true;if(!isTyping())render(ui.tab==='zhurnal');if(form)updateHints();
   },fail);
   db.collection('days').onSnapshot(s=>{
-    const n={};let p=0;s.docs.forEach(d=>{const x=d.data();n[d.id]=x&&x.ops||{};if(d.pending)p++;});days=n;pendingDays=p;setNet();
+    const n={};let p=0;s.docs.forEach(d=>{const x=d.data();n[d.id]=x&&x.ops||{};if(d.pending)p++;});days=n;saveSnap();pendingDays=p;setNet();
     daysLoaded=true;if(!isTyping())render();if(form)updateHints();
     resolveNames();
   },fail,true);
@@ -1138,6 +1146,23 @@ function startData(){
         auditBy[u]=list;audit=[].concat(...Object.values(auditBy));onAudit();
       },()=>{});});
   },()=>{auditLoaded=true;});
+}
+
+/* ---------- instant start: last known data saved on the phone ---------- */
+const SNAP_KEY='bs.snap.v1';let snapT=null,snapRestored=false,authStarted=false;
+function saveSnap(){clearTimeout(snapT);snapT=setTimeout(()=>{try{if(me&&me.id&&ownerUid)localStorage.setItem(SNAP_KEY,JSON.stringify({me,ownerUid,roles,cfg,clients,days,members}));}catch(e){}},600);}
+function clearSnap(){try{localStorage.removeItem(SNAP_KEY);}catch(e){}}
+function restoreSnap(){
+  try{
+    const x=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');
+    if(!x||!x.me||!x.me.id||!x.ownerUid||!x.cfg)return;
+    me=x.me;ownerUid=x.ownerUid;roles=x.roles||{};cfg=x.cfg;clients=x.clients||{};days=x.days||{};members=x.members||{};
+    for(const k in members)names[k]=members[k].name||'';names[me.id]=me.name;
+    authState='in';ownerLoaded=true;isOwner=ownerUid===me.id;canAdmin=isOwner;rolesLoaded=true;
+    const ro=myRole();canWrite=ro!=='viewer'&&ro!=='none';
+    cfgLoaded=daysLoaded=clientsLoaded=true;snapRestored=true;
+    document.getElementById('who').textContent=me.name;document.getElementById('logout').hidden=false;
+  }catch(e){}
 }
 
 /* ---------- first run: become owner, import data ---------- */
@@ -1182,14 +1207,19 @@ async function doLogin(){
   }
 }
 
-setTabFromHash();render(true);
+setTabFromHash();restoreSnap();render(true);
+loadSdk().then(()=>{
+initFB();
 getRedirectResult(FB.auth).catch(()=>{});
 onAuthStateChanged(FB.auth,u=>{
-  if(!u){authState='out';render(true);return;}
-  if(authState==='in')return;
+  if(!u){clearSnap();if(snapRestored){location.reload();return;}authState='out';render(true);return;}
+  if(authStarted)return;
+  authStarted=true;
+  if(snapRestored&&me.id!==u.uid){clearSnap();location.reload();return;}
   authState='in';
   me={id:u.uid,name:u.displayName||u.email||'',email:u.email||''};
   db=fbdb;
+  if(snapRestored&&myRole()!=='none')startData();
   document.getElementById('who').textContent=me.name;
   document.getElementById('logout').hidden=false;
   names[me.id]=me.name;
@@ -1198,7 +1228,7 @@ onAuthStateChanged(FB.auth,u=>{
     ownerUid=s.exists?(s.data()||{}).uid:null;ownerLoaded=true;
     isOwner=ownerUid===me.id;canAdmin=isOwner;
     if(ownerUid&&!rolesSub){
-      rolesSub=db.doc('roles/main').onSnapshot(r=>{const d=r.exists?r.data():null;roles=d&&d.users||{};rolesLoaded=true;
+      rolesSub=db.doc('roles/main').onSnapshot(r=>{const d=r.exists?r.data():null;roles=d&&d.users||{};rolesLoaded=true;saveSnap();
         const ro=myRole();canWrite=ro!=='viewer'&&ro!=='none';
         if(ro!=='none')startData();
         if(!isTyping())render(true);if(isOwner)resolveMemberNames();},()=>{rolesLoaded=true;render(true);});
@@ -1206,6 +1236,7 @@ onAuthStateChanged(FB.auth,u=>{
     render(true);
   },e=>{console.warn(e);ownerLoaded=true;render(true);});
 });
+}).catch(e=>{console.warn(e);if(!snapRestored){noDb=true;authState='in';ownerLoaded=true;ownerUid=ownerUid||'?';render(true);}});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 setNet();
 })();
