@@ -9,6 +9,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Baza Service">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -287,7 +290,7 @@ nav.tabs a{position:relative}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 5</div>
+<div class="ver" id="ver">версія 6</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -468,7 +471,7 @@ function render(full){
   document.getElementById('gear').classList.toggle('on',ui.tab==='nalashtuvannia');
   document.getElementById('gear').hidden=role!=='owner';
   document.querySelector('nav.tabs').hidden=!(role==='owner'||role==='full'||role==='viewer');
-  document.getElementById('fab').hidden=!(db&&canWrite&&cfgLoaded&&rolesLoaded&&role!=='none'&&C().boxes.length);
+  document.getElementById('fab').hidden=!((db||snapRestored)&&canWrite&&cfgLoaded&&rolesLoaded&&role!=='none'&&C().boxes.length);
   const v=document.getElementById('view');
   if(authState!=='in'||!ownerLoaded||!ownerUid){
     document.querySelector('nav.tabs').hidden=true;document.getElementById('fab').hidden=true;document.getElementById('gear').hidden=true;
@@ -969,6 +972,7 @@ function buildOp(prev,clientId){
   return op;
 }
 async function ensureClient(name){
+  if(!db)await dbReady;
   const n=name.trim();const hit=Object.keys(clients).find(id=>String(clients[id].name).trim().toLowerCase()===n.toLowerCase());
   if(hit)return hit;
   const id='c'+uid();await db.doc('clients/'+id).set({name:n,archived:false,by:me.id,ts:Date.now()});
@@ -980,7 +984,8 @@ async function putOp(day,id,op){
 async function saveForm(){
   const err=validate();const ee=document.getElementById('f-err');
   if(err){ee.textContent=err;return;}
-  const btn=document.getElementById('f-save');btn.disabled=true;btn.textContent='Зберігаю…';ee.textContent='';
+  const btn=document.getElementById('f-save');btn.disabled=true;btn.textContent=db?'Зберігаю…':'З\u2019єднуюсь…';ee.textContent='';
+  if(!db)await dbReady;btn.textContent='Зберігаю…';
   try{
     const prev=form.id?findOp(form.origDay+'|'+form.id):null;
     let clientId=form.client;
@@ -1049,7 +1054,7 @@ document.addEventListener('click',async e=>{
     case 'opview':openOpView(v);break;
     case 'opedit':{const o=findOp(v);if(!o)return;const kind=o.type==='expense'||o.type==='clientOut'?'out':o.type==='income'||o.type==='clientIn'?'in':o.type;const target=o.type==='clientOut'||o.type==='clientIn'?'cli:'+o.client:o.type==='expense'?'exp':o.type==='income'?'inc':'';const cat=o.isAsset?'__oz':(o.category||'');openForm({id:o.id,origDay:o.day,kind,target,cat,payVia:o.payVia||'box',date:o.date,from:o.from||'',to:o.to||'',client:o.client||'',newClient:'',cur:o.cur,cur2:o.cur2||'USD',amount:String(o.amount),amount2:o.amount2!=null?String(o.amount2):'',rate:o.rate!=null?String(o.rate):'',assetName:o.assetName||'',comment:o.comment||''});break;}
     case 'opdel':{const box=document.getElementById('op-actions');box.innerHTML=`<span class="small" style="align-self:center">Видалити операцію назавжди?</span><button class="btn danger solid" type="button" data-act="opdel2" data-v="${esc(v)}">Так, видалити</button><button class="btn" type="button" data-act="close">Ні</button>`;break;}
-    case 'opdel2':{const [d,id]=v.split('|');const before=cleanOp(findOp(v));el.disabled=true;try{await db.doc('days/'+d).update({ops:{[id]:{deleted:true,deletedBy:me.id,deletedTs:Date.now()}}});let logged=true;try{await logAudit('delete',id,before,null);}catch(e2){logged=false;}closeSheet();toast(logged?'Операцію видалено':'Видалено, але історію не записано');}catch(err){el.disabled=false;toast('Не вдалося видалити');}break;}
+    case 'opdel2':{if(!db)await dbReady;const [d,id]=v.split('|');const before=cleanOp(findOp(v));el.disabled=true;try{await db.doc('days/'+d).update({ops:{[id]:{deleted:true,deletedBy:me.id,deletedTs:Date.now()}}});let logged=true;try{await logAudit('delete',id,before,null);}catch(e2){logged=false;}closeSheet();toast(logged?'Операцію видалено':'Видалено, але історію не записано');}catch(err){el.disabled=false;toast('Не вдалося видалити');}break;}
     case 'disp':ui.disp=v;try{localStorage.setItem('kasa.disp',v);}catch(e){}render();break;
     case 'login':doLogin();break;
     case 'logout':clearSnap();if(!FB.auth){location.reload();break;}signOut(FB.auth).then(()=>location.reload());break;
@@ -1151,6 +1156,7 @@ function startData(){
 }
 
 /* ---------- instant start: last known data saved on the phone ---------- */
+let dbReadyResolve;const dbReady=new Promise(r=>dbReadyResolve=r);
 const SNAP_KEY='bs.snap.v1';let snapT=null,snapRestored=false,authStarted=false;
 function saveSnap(){clearTimeout(snapT);snapT=setTimeout(()=>{try{if(me&&me.id&&ownerUid)localStorage.setItem(SNAP_KEY,JSON.stringify({me,ownerUid,roles,cfg,clients,days,members}));}catch(e){}},600);}
 function clearSnap(){try{localStorage.removeItem(SNAP_KEY);}catch(e){}}
@@ -1220,7 +1226,7 @@ onAuthStateChanged(FB.auth,u=>{
   if(snapRestored&&me.id!==u.uid){clearSnap();location.reload();return;}
   authState='in';
   me={id:u.uid,name:u.displayName||u.email||'',email:u.email||''};
-  db=fbdb;
+  db=fbdb;dbReadyResolve();
   if(snapRestored&&myRole()!=='none')startData();
   document.getElementById('who').textContent=me.name;
   document.getElementById('logout').hidden=false;
