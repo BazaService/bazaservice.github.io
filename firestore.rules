@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function ownerPath() { return /databases/$(database)/documents/meta/owner; }
+    function rolesPath() { return /databases/$(database)/documents/roles/main; }
+    function isOwner() {
+      return signedIn() && exists(ownerPath()) && get(ownerPath()).data.uid == request.auth.uid;
+    }
+    function role() {
+      return isOwner() ? 'owner'
+        : (exists(rolesPath())
+            ? get(rolesPath()).data.users.get(request.auth.uid, {}).get('role', 'none')
+            : 'none');
+    }
+    function canRead()  { return signedIn() && role() in ['owner', 'full', 'cashier', 'viewer']; }
+    function canWrite() { return signedIn() && role() in ['owner', 'full', 'cashier']; }
+    function selfOrLegacy(uid) {
+      return signedIn() && (request.auth.uid == uid || (uid == 'legacy' && isOwner()));
+    }
+
+    // Хто власник. Створюється один раз — першим, хто увійшов.
+    match /meta/owner {
+      allow read: if signedIn();
+      allow create: if signedIn() && !exists(ownerPath()) && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Налаштування і права — змінює тільки власник.
+    match /config/{d} { allow read: if canRead();  allow write: if isOwner(); }
+    match /roles/{d}  { allow read: if signedIn(); allow write: if isOwner(); }
+
+    // Хто заходив у застосунок. Кожен пише тільки про себе.
+    match /members/{uid} {
+      allow read: if canRead();
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Клієнти й операції.
+    match /clients/{d} {
+      allow read: if canRead();
+      allow create, update: if role() in ['owner', 'full'];
+      allow delete: if isOwner();
+    }
+    match /days/{d} {
+      allow read: if canRead();
+      allow create, update: if canWrite();
+      allow delete: if isOwner();
+    }
+
+    // Історія змін: кожен пише тільки свою, тільки додає, нічого не змінює і не видаляє.
+    match /audit/{uid} {
+      allow read: if canRead();
+      allow create, update: if selfOrLegacy(uid) && (canWrite() || uid == 'legacy');
+    }
+    match /audit/{uid}/months/{d} {
+      allow read: if canRead();
+      allow create: if selfOrLegacy(uid) && (canWrite() || uid == 'legacy');
+      allow update: if selfOrLegacy(uid) && (canWrite() || uid == 'legacy')
+        && request.resource.data.e.diff(resource.data.e).changedKeys().size() == 0
+        && request.resource.data.e.diff(resource.data.e).removedKeys().size() == 0;
+    }
+
+    // Особисті налаштування кожного користувача.
+    match /data/users/{uid}/{doc} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+  }
+}

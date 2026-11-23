@@ -1,5 +1,1213 @@
 <!doctype html>
-<html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Baza Service</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0F0F0F;color:#EDEDEB;font-family:system-ui,-apple-system,sans-serif;text-align:center;padding:24px}h1{margin:0 0 8px;font-size:28px}p{margin:0;color:#9C9C98}</style>
-</head><body><div><h1>Baza Service</h1><p>Застосунок налаштовується. Скоро тут буде каса.</p></div></body></html>
+<meta name="theme-color" content="#0F0F0F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Baza Service">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;700&display=swap">
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;font:14px system-ui,-apple-system,sans-serif}
+img{max-width:100%}
+[hidden]{display:none!important}
+/* Layout: one narrow column like a cash ledger; bottom tab bar + "+" button for thumb use on a phone */
+:root{
+  --bg:#F3F3F1; --surface:#FFFFFF; --surface-2:#F7F7F5; --line:#E0E0DC; --ink:#121212; --muted:#6B6B68;
+  --accent:#161616; --accent-ink:#FFFFFF; --accent-soft:#ECECEA;
+  --out:#B23A2E; --out-soft:#F7E6E3; --in:#24784A; --in-soft:#E2F0E7;
+  --move:#4A5568; --move-soft:#E9EBEF; --fx:#8A6418; --fx-soft:#F3ECDD; --inv:#3F3F3F; --inv-soft:#EAEAE8;
+  --shadow:0 10px 30px rgba(0,0,0,.16); --hero:#161616; --hero-ink:#FFFFFF;
+  --font-body:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-display:'Unbounded','Manrope',system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F0F0F; --surface:#191919; --surface-2:#202020; --line:#2E2E2E; --ink:#EDEDEB; --muted:#9C9C98;
+  --accent:#F2F2F0; --accent-ink:#111111; --accent-soft:#2A2A2A;
+  --out:#EE8A7C; --out-soft:#3A2321; --in:#78CF98; --in-soft:#1C3125; --move:#B4BDCB; --move-soft:#252A31; --fx:#DDB467; --fx-soft:#352C1A; --inv:#D6D6D2; --inv-soft:#2A2A2A;
+  --shadow:0 10px 30px rgba(0,0,0,.55); --hero:#232323; --hero-ink:#F2F2F0; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F0F0F; --surface:#191919; --surface-2:#202020; --line:#2E2E2E; --ink:#EDEDEB; --muted:#9C9C98;
+  --accent:#F2F2F0; --accent-ink:#111111; --accent-soft:#2A2A2A;
+  --out:#EE8A7C; --out-soft:#3A2321; --in:#78CF98; --in-soft:#1C3125; --move:#B4BDCB; --move-soft:#252A31; --fx:#DDB467; --fx-soft:#352C1A; --inv:#D6D6D2; --inv-soft:#2A2A2A;
+  --shadow:0 10px 30px rgba(0,0,0,.55); --hero:#232323; --hero-ink:#F2F2F0; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.45;font-variant-numeric:tabular-nums}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:760px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 120px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+header.top h1{font-family:var(--font-display);font-weight:700;font-size:clamp(16px,4.6vw,20px);margin:0;letter-spacing:-.01em}
+header.top .r{display:flex;align-items:center;gap:10px}
+header.top .who{color:var(--muted);font-size:13px}
+.gear{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
+.gear.on{color:var(--accent);border-color:var(--accent)}
+.gear svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:26px 0 10px;font-weight:700}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.pos{color:var(--in)} .neg{color:var(--out)}
+
+/* Hero: balance */
+.hero{background:var(--hero);color:var(--hero-ink);border:1px solid var(--line);border-radius:18px;padding:18px 18px 16px}
+.hero .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;opacity:.8;font-weight:700}
+.hero .num{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,8vw,38px);letter-spacing:-.02em;margin-top:4px}
+.hero .sub{margin-top:6px;font-size:13px;opacity:.9}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+@media (max-width:460px){.stats{grid-template-columns:1fr 1fr}.stats .stat:first-child{grid-column:1/-1}}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 12px;min-width:0}
+.stat .l{font-size:12px;color:var(--muted);font-weight:700}
+.stat .v{font-family:var(--font-display);font-weight:700;font-size:18px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.check{font-size:12px;color:var(--muted);margin-top:8px}
+.warn-card{background:var(--fx-soft);color:var(--fx);border-radius:12px;padding:10px 12px;font-weight:700;font-size:13px;margin-top:10px}
+.warn-card a{color:inherit}
+
+.boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;text-align:left;display:flex;flex-direction:column;gap:6px;min-width:0}
+.box:hover{border-color:var(--accent)}
+.box .name{font-weight:700}
+.box .bal{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.box .bal .neg{color:var(--out)}
+.box .empty{font-size:13px;color:var(--muted)}
+.box .eq{font-size:12px;color:var(--muted)}
+
+.tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 12px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+thead th{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;background:var(--surface-2)}
+tr:last-child td{border-bottom:0}
+tr.total td{font-weight:800;background:var(--surface-2)}
+tr.sec td{font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:var(--surface-2)}
+td.ind{padding-left:22px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+.empty-state{background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:18px;color:var(--muted)}
+.empty-state b{color:var(--ink)}
+
+/* Clients */
+.clients{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.cl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:11px 14px;border:0;border-bottom:1px solid var(--line);background:none;text-align:left;width:100%}
+.cl:last-child{border-bottom:0}
+.cl:hover{background:var(--surface-2)}
+.cl .n{font-weight:700;overflow:hidden;text-overflow:ellipsis}
+.cl .b{display:flex;flex-direction:column;align-items:flex-end;font-weight:700;font-size:14px}
+.cl .b .w{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.cl .eq{font-size:12px;color:var(--muted)}
+.dbar{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px}
+.dtog{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+.dtog button{border:0;background:none;border-radius:7px;padding:5px 12px;font-weight:800;font-size:14px;color:var(--muted)}
+.dtog button.on{background:var(--accent);color:var(--accent-ink)}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+@media (max-width:520px){.tiles{grid-template-columns:1fr}}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 12px;text-align:left;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 10px;min-width:0}
+.tile:hover{border-color:var(--accent)}
+.tile .l{font-size:12px;color:var(--muted);font-weight:700}
+.tile .v{grid-column:1;font-family:var(--font-display);font-weight:700;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .go{grid-column:2;grid-row:1/3;font-size:12px;color:var(--muted);font-weight:700}
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.duo.duo3{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+.duo3 .stat .v{font-size:clamp(13px,3.8vw,18px);white-space:normal;overflow-wrap:anywhere}
+.ratebox{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 10px;background:var(--surface-2);border:1px dashed var(--line);border-radius:14px;text-align:center;min-width:72px}
+.ratebox .rl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.ratebox .ri{display:flex;flex-direction:column;line-height:1.2}
+.ratebox .rk{font-size:11px;color:var(--muted)}
+.ratebox b{font-size:14px;white-space:nowrap}
+.ratebox .rs{font-size:10px;color:var(--muted)}
+
+/* Filters */
+.filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.filters .full{grid-column:1/-1}
+@media (min-width:620px){.filters{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.filters label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);font-weight:600;min-width:0}
+input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 10px;width:100%;min-width:0}
+input[type=checkbox]{width:20px;height:20px;padding:0;accent-color:var(--accent)}
+textarea{resize:vertical}
+.row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+
+/* Journal */
+.day{margin-top:18px}
+.day-h{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.day-h .d{font-weight:800;text-transform:capitalize}
+.day-h .tot{font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}
+.ops{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.op{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left}
+.op:last-child{border-bottom:0}
+.op:hover{background:var(--surface-2)}
+.tag{font-size:11px;font-weight:800;border-radius:6px;padding:3px 6px;white-space:nowrap;text-transform:uppercase;letter-spacing:.03em}
+.c-out{color:var(--out)} .bg-out{background:var(--out-soft);color:var(--out)}
+.c-in{color:var(--in)} .bg-in{background:var(--in-soft);color:var(--in)}
+.c-move{color:var(--move)} .bg-move{background:var(--move-soft);color:var(--move)}
+.c-fx{color:var(--fx)} .bg-fx{background:var(--fx-soft);color:var(--fx)}
+.c-inv{color:var(--inv)} .bg-inv{background:var(--inv-soft);color:var(--inv)}
+.tagcol{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;max-width:96px}
+.who-s{font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px}
+.op .t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.op .s{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.op .a{text-align:right;font-weight:800;white-space:nowrap;display:flex;flex-direction:column;align-items:flex-end}
+.linkbtn{background:none;border:0;color:var(--accent);font-weight:700;padding:4px 0;font-size:13px}
+.eod{margin-top:6px}
+.more{display:block;margin:18px auto 0}
+.legend{font-size:12px;color:var(--muted);margin-top:10px}
+
+/* Report bars */
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px}
+.bar-row .n{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.bar-row .v{font-weight:800;text-align:right}
+.bar-row .track{grid-column:1/-1;height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.bar-row .fill{height:100%;background:var(--out);border-radius:4px}
+.bar-row .fill.oz{background:var(--inv)}
+
+/* Buttons */
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 14px;font-weight:700}
+.btn.on{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);width:100%;padding:13px;font-size:16px}
+.btn.danger{color:var(--out);border-color:var(--out)}
+.btn.danger.solid{background:var(--out);color:var(--surface)}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* Nav + FAB */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+nav.tabs .in{max-width:760px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
+nav.tabs a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px 10px;text-decoration:none;color:var(--muted);font-size:12px;font-weight:700}
+nav.tabs a.on{color:var(--accent)}
+nav.tabs svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+.fab{position:fixed;z-index:21;right:max(18px,calc(env(safe-area-inset-right,0px) + 18px));bottom:calc(env(safe-area-inset-bottom,0px) + 74px);width:58px;height:58px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);font-size:32px;line-height:1;box-shadow:var(--shadow)}
+@media (min-width:800px){.fab{right:calc(50% - 380px)}}
+
+/* Sheet */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:560px;max-height:92%;overflow:auto;border-radius:20px 20px 0 0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));box-shadow:var(--shadow)}
+@media (min-width:600px){.overlay{align-items:center}.sheet{border-radius:20px}}
+.sheet-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.sheet-h h3{margin:0;font-family:var(--font-display);font-size:17px;font-weight:700}
+.x{background:var(--surface);border:1px solid var(--line);width:36px;height:36px;border-radius:50%;font-size:20px;line-height:1}
+.seg{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.seg-b{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 12px;font-weight:700;font-size:13px}
+.seg.kinds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.seg.kinds .seg-b{border-radius:12px;padding:6px 4px 7px;display:flex;flex-direction:column;align-items:center;gap:0;line-height:1.15}
+.seg.kinds .sg{font-size:24px;font-weight:800}
+.seg.kinds .cap{font-size:11px;font-weight:700;opacity:.85}
+.seg-b.on.t-out{background:var(--out);color:var(--surface);border-color:var(--out)}
+.seg-b.on.t-in{background:var(--in);color:var(--surface);border-color:var(--in)}
+.seg-b.on.t-move{background:var(--move);color:var(--surface);border-color:var(--move)}
+.seg-b.on.t-fx{background:var(--fx);color:var(--surface);border-color:var(--fx)}
+.seg-b.on.t-inv{background:var(--inv);color:var(--surface);border-color:var(--inv)}
+.pay{display:grid;grid-template-columns:1fr 1fr;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px;margin-bottom:10px}
+.pay button{border:0;background:none;border-radius:8px;padding:8px;font-weight:700;font-size:13px;color:var(--muted)}
+.pay button.on{background:var(--accent-soft);color:var(--accent)}
+.fld{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;min-width:0}
+.fld>span{font-size:12px;font-weight:700;color:var(--muted)}
+.chk{display:flex;align-items:center;gap:10px;font-weight:700;margin-bottom:10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.hint{font-size:12px;color:var(--muted);min-height:1em}
+.hint.warn{color:var(--out);font-weight:700}
+.calc{background:var(--fx-soft);color:var(--fx);border-radius:10px;padding:8px 10px;font-weight:700;font-size:13px;margin-bottom:10px}
+.err{color:var(--out);font-weight:700;margin:4px 0 10px;min-height:1em}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 14px;margin-bottom:14px}
+.kv dt{color:var(--muted);font-size:13px}
+.kv dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+
+/* Settings */
+.list{display:flex;flex-direction:column;gap:8px}
+.li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.li.rate{grid-template-columns:70px minmax(0,1fr)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.olist{display:flex;flex-direction:column}
+.orow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.orow:last-child{border-bottom:0}
+.orow .nm{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.ctl{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.mv{width:36px;height:36px;border:1px solid var(--line);background:var(--surface);border-radius:10px;font-weight:800;font-size:16px;line-height:1}
+.mv:disabled{opacity:.3;cursor:default}
+.mv.del{color:var(--out)}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 6px 5px 12px;font-weight:600;font-size:13px}
+.chip button{border:0;background:var(--surface-2);border-radius:50%;width:22px;height:22px;line-height:1}
+.addrow{display:flex;gap:8px;margin-top:8px}
+.addrow input{flex:1}
+.archived{opacity:.55}
+.bd{font-size:12px;color:var(--muted);margin-top:2px;font-weight:600;overflow-wrap:anywhere}
+nav.tabs a{position:relative}
+.badge{position:absolute;top:5px;left:calc(50% + 6px);background:var(--out);color:#fff;font-size:11px;font-weight:800;border-radius:999px;padding:1px 6px;line-height:1.4}
+.audit-card{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}
+.au{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:3px}
+.au:last-child{border-bottom:0}
+.au.new{background:var(--fx-soft)}
+.au-h{display:flex;align-items:center;gap:8px;min-width:0}
+.au-h .t{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.au-h .amt{font-weight:800;white-space:nowrap}
+.au .s{font-size:12px;color:var(--muted)}
+.au .df{font-size:13px;display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere}
+.au .df s{color:var(--muted)}
+.prow{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.prow:last-child{border-bottom:0}
+.pn{display:flex;flex-direction:column;min-width:0}
+.pc{display:flex;gap:6px;flex-wrap:wrap}
+.pc select{width:auto;min-width:140px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 144px);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-weight:700;z-index:60;font-size:14px}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
+.net{border-radius:12px;padding:10px 12px;font-weight:700;font-size:13px;margin-bottom:12px}
+.net.off{background:var(--fx-soft);color:var(--fx)}
+.net.sync{background:var(--move-soft);color:var(--move)}
+.logout{background:none;border:0;color:var(--muted);font-size:12px;font-weight:700;padding:4px;text-decoration:underline}
+.login{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;padding:48px 8px}
+.login h2{font-family:var(--font-display);font-size:22px;margin:0;color:var(--ink);text-transform:none;letter-spacing:0}
+.login p{margin:0;color:var(--muted);max-width:360px}
+.gbtn{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:14px 22px;font-weight:800;font-size:16px}
+.mig{display:flex;flex-direction:column;gap:12px}
+.mig input[type=file]{padding:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top"><h1>Baza Service</h1><span class="r"><span class="who" id="who"></span><button class="logout" id="logout" type="button" data-act="logout" hidden>Вийти</button><a class="gear" id="gear" href="#nalashtuvannia" aria-label="Налаштування"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></a></span></header>
+  <div id="net" class="net" hidden></div>
+  <main id="view"><div class="empty-state">Завантажую дані каси…</div></main>
+</div>
+<button class="fab" id="fab" type="button" aria-label="Нова операція" data-act="new" hidden>+</button>
+<nav class="tabs" aria-label="Розділи"><div class="in">
+  <a href="#kasy" data-tab="kasy"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14.5h2"/></svg>Каси</a>
+  <a href="#panel" data-tab="panel"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M14.8 9.3c-.5-.9-1.5-1.4-2.8-1.4-1.6 0-2.7.8-2.7 2s1 1.7 2.7 2.1 2.9.9 2.9 2.2-1.2 2.1-2.9 2.1c-1.4 0-2.5-.6-3-1.6M12 6.2v1.7M12 16.3V18"/></svg>Гроші</a>
+  <a href="#kliienty" data-tab="kliienty"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.6 3-5.5 6-5.5s5.4 1.9 6 5.5"/><path d="M16 5.2a3 3 0 0 1 0 5.6M18 14.8c1.7.7 2.7 2.4 3 5.2"/></svg>Клієнти</a>
+  <a href="#zhurnal" data-tab="zhurnal"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>Журнал</a>
+  <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
+</div></nav>
+<div id="sheet-root"></div>
+
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
+import {getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut} from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
+import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc as fdoc,collection as fcol,setDoc,getDoc,onSnapshot as fsnap,writeBatch} from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import {firebaseConfig} from './firebase-config.js';
+(function(){
+"use strict";
+/* ---------- Firebase layer (replaces Claude runtime) ---------- */
+const FB={};
+FB.app=initializeApp(firebaseConfig);
+FB.auth=getAuth(FB.app);
+FB.fs=initializeFirestore(FB.app,{ignoreUndefinedProperties:true,localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
+function writeErr(e){try{window.dispatchEvent(new CustomEvent('fb-write-error',{detail:e}));}catch(_){} }
+function mkDoc(path){const ref=fdoc(FB.fs,path);return{
+  set(data){setDoc(ref,data).catch(writeErr);return Promise.resolve();},
+  update(data){setDoc(ref,data,{merge:true}).catch(writeErr);return Promise.resolve();},
+  async get(){const s=await getDoc(ref);return {exists:s.exists(),data:()=>s.data()};},
+  onSnapshot(cb,err){return fsnap(ref,s=>cb({exists:s.exists(),data:()=>s.data()}),err||(()=>{}));}
+};}
+function mkCol(path){const ref=fcol(FB.fs,path);return{
+  onSnapshot(cb,err,meta){return fsnap(ref,{includeMetadataChanges:!!meta},s=>cb({docs:s.docs.map(d=>({id:d.id,data:()=>d.data(),pending:d.metadata.hasPendingWrites})),fromCache:s.metadata.fromCache}),err||(()=>{}));}
+};}
+const fbdb={doc:mkDoc,collection:mkCol};
+/*LOGIC*/
+const BASE='UAH';
+const SYM={UAH:'₴',USD:'$',EUR:'€',PLN:'zł',GBP:'£'};
+const TYPES={
+  expense:{label:'Витрата',cls:'out'},
+  income:{label:'Дохід',cls:'in'},
+  clientIn:{label:'Від клієнта',cls:'inv'},
+  clientOut:{label:'Клієнту',cls:'inv'},
+  transfer:{label:'Переказ',cls:'move'},
+  exchange:{label:'Обмін',cls:'fx'}
+};
+const DEFAULT_CFG={boxes:[],categories:['Інше'],incomeCategories:['Інший дохід'],currencies:['UAH','USD','EUR'],rates:{}};
+let cfg=null,days={},clients={};
+
+function r2(n){return Math.round((+n||0)*100)/100;}
+function C(){return cfg||DEFAULT_CFG;}
+function allOps(){
+  const out=[];
+  for(const d in days){const ops=days[d]||{};for(const id in ops){const o=ops[id];if(o&&!o.deleted&&o.type)out.push(Object.assign({},o,{id,day:d}));}}
+  out.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.ts||0)-(b.ts||0));
+  return out;
+}
+/* Cash effects on boxes: [box,cur,amount] */
+function effects(o){
+  const a=+o.amount||0;
+  switch(o.type){
+    case 'expense':return o.payVia==='client'?[]:[[o.from,o.cur,-a]];
+    case 'income':return o.payVia==='client'?[]:[[o.to,o.cur,a]];
+    case 'clientIn':return [[o.to,o.cur,a]];
+    case 'clientOut':return [[o.from,o.cur,-a]];
+    case 'transfer':return [[o.from,o.cur,-a],[o.to,o.cur,a]];
+    case 'exchange':return [[o.from,o.cur,-a],[o.to,o.cur2,+o.amount2||0]];
+  }
+  return [];
+}
+/* Client effects: positive = client owes me, negative = I owe client */
+function clientEffects(o){
+  const a=+o.amount||0;
+  switch(o.type){
+    case 'expense':return o.payVia==='client'?[[o.client,o.cur,-a]]:[];
+    case 'income':return o.payVia==='client'?[[o.client,o.cur,a]]:[];
+    case 'clientIn':return [[o.client,o.cur,-a]];
+    case 'clientOut':return [[o.client,o.cur,a]];
+  }
+  return [];
+}
+function sumInto(map,list){for(const [k,cur,a] of list){if(!k||!cur)continue;map[k]=map[k]||{};map[k][cur]=r2((map[k][cur]||0)+a);}}
+function boxBalances(ops,uptoDay,skipId){const b={};for(const o of ops){if(uptoDay&&o.date>uptoDay)continue;if(skipId&&o.id===skipId)continue;sumInto(b,effects(o));}return b;}
+function clientBalances(ops){const b={};for(const o of ops)sumInto(b,clientEffects(o));return b;}
+function totalsByCur(bal){const t={};for(const k in bal)for(const c in bal[k])t[c]=r2((t[c]||0)+bal[k][c]);return t;}
+
+/* Exchange rate history (UAH per 1 unit) from exchanges that involve UAH */
+function rateHistory(ops){
+  const h={};
+  for(const o of ops){
+    if(o.type!=='exchange'||!(o.amount>0)||!(o.amount2>0))continue;
+    let cur=null,r=null;
+    if(o.cur2===BASE&&o.cur!==BASE){cur=o.cur;r=o.amount2/o.amount;}
+    else if(o.cur===BASE&&o.cur2!==BASE){cur=o.cur2;r=o.amount/o.amount2;}
+    if(cur)(h[cur]=h[cur]||[]).push({date:o.date,ts:o.ts||0,rate:r});
+  }
+  return h;
+}
+function currentRate(cur,hist){
+  if(cur===BASE)return 1;
+  const m=C().rates&&+C().rates[cur];
+  if(m>0)return m;
+  const l=hist[cur];return l&&l.length?l[l.length-1].rate:null;
+}
+function lastExchange(cur,hist){const l=hist[cur];return l&&l.length?l[l.length-1]:null;}
+function rateAt(cur,date,hist){
+  if(cur===BASE)return 1;
+  const l=hist[cur]||[];let r=null;
+  for(const x of l){if(x.date<=date)r=x.rate;else break;}
+  if(r==null&&l.length)r=l[0].rate;
+  if(r==null)r=currentRate(cur,hist);
+  return r;
+}
+/* Whole model for one render */
+function model(){
+  const ops=allOps();const hist=rateHistory(ops);const missing=new Set();
+  const nowR=cur=>{const r=currentRate(cur,hist);if(r==null){missing.add(cur);return 0;}return r;};
+  const opR=(cur,date)=>{const r=rateAt(cur,date,hist);if(r==null){missing.add(cur);return 0;}return r;};
+  const boxes=boxBalances(ops),cli=clientBalances(ops);
+  const cash=totalsByCur(boxes);
+  let cashU=0;for(const c in cash)cashU+=cash[c]*nowR(c);
+  let owedToMe=0,iOwe=0;const owedCur={},oweCur={};
+  for(const k in cli){let v=0;for(const c in cli[k])v+=cli[k][c]*nowR(c);
+    if(v>0)owedToMe+=v;else iOwe+=-v;
+    const tgt=v>0.004?owedCur:v<-0.004?oweCur:null;
+    if(tgt)for(const c in cli[k]){const a=v>0?cli[k][c]:-cli[k][c];tgt[c]=r2((tgt[c]||0)+a);}}
+  const balance=r2(cashU+owedToMe-iOwe);
+  const pl=o=>{const u=(+o.amount||0)*opR(o.cur,o.date);return o.type==='income'?u:o.type==='expense'?-u:0;};
+  const months={};let plAll=0;
+  for(const o of ops){if(o.type!=='income'&&o.type!=='expense')continue;const v=pl(o);plAll+=v;const m=o.date.slice(0,7);const x=months[m]=months[m]||{inc:0,exp:0,oz:0};if(o.type==='income')x.inc+=v;else if(o.isAsset)x.oz+=-v;else x.exp+=-v;}
+  plAll=r2(plAll);
+  return {ops,hist,missing,boxes,cli,cash,cashU:r2(cashU),owedToMe:r2(owedToMe),iOwe:r2(iOwe),owedCur,oweCur,balance,plAll,fxDiff:r2(balance-plAll),months,nowR,opR,pl};
+}
+/*ENDLOGIC*/
+
+let db=null,user=null,downloads=null,me={id:null},canWrite=true,canAdmin=false,noDb=false;
+let cfgLoaded=false,daysLoaded=false,clientsLoaded=false;
+const names={};
+const ui={tab:'kasy',eodDate:'',f:{from:'',to:'',box:'',client:'',type:'',cat:'',q:''},rep:{month:thisMonth()},dayLimit:30,openEod:new Set()};
+let form=null;
+let authState='loading',ownerUid=null,ownerLoaded=false,rolesSub=null;
+let baseWrite=true,isOwner=false,roles={},rolesLoaded=false,members={};
+let audit=[],auditSeen=0,auditLoaded=false;const auditBy={},auditSubs={};
+ui.audit={all:false,limit:150};
+
+/* ---------- helpers ---------- */
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function num(s){const v=parseFloat(String(s==null?'':s).replace(/\s/g,'').replace(',','.'));return isFinite(v)?v:NaN;}
+function fmt(n,cur,signed){const v=r2(n);const a=Math.abs(v).toLocaleString('uk-UA',{minimumFractionDigits:Number.isInteger(v)?0:2,maximumFractionDigits:2});const sign=v<0?'−':(signed&&v>0?'+':'');return sign+a+' '+(SYM[cur]||cur);}
+function fmtU(n,signed){const v=Math.round(+n||0);return fmt(v,BASE,signed);}
+function fmtRate(r){return r==null?'—':(Math.round(r*100)/100).toLocaleString('uk-UA',{maximumFractionDigits:2});}
+function pad(n){return String(n).padStart(2,'0');}
+function today(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function thisMonth(){return today().slice(0,7);}
+function monthLabel(m){const [y,mm]=m.split('-');const s=new Date(+y,+mm-1,15).toLocaleDateString('uk-UA',{month:'long',year:'numeric'});return s.charAt(0).toUpperCase()+s.slice(1);}
+function dayLabel(d){const dt=new Date(d+'T12:00:00');const s=dt.toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long'});return d.slice(0,4)!==String(new Date().getFullYear())?s+' '+d.slice(0,4):s;}
+function shortDate(d){const [y,m,dd]=d.split('-');return dd+'.'+m+'.'+y;}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function boxName(id){const b=C().boxes.find(b=>b.id===id);return b?b.name:'(невідома каса)';}
+function clientName(id){const c=clients[id];return c?c.name:'(клієнт)';}
+function clientList(keep){return Object.keys(clients).map(id=>Object.assign({id},clients[id])).filter(c=>!c.archived||c.id===keep).sort((a,b)=>String(a.name).localeCompare(String(b.name),'uk'));}
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);}catch(e){return null;}}
+function toast(t){const el=document.createElement('div');el.className='toast';el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),2200);}
+function opt(v,l,sel){return `<option value="${esc(v)}"${String(sel)===String(v)?' selected':''}>${esc(l)}</option>`;}
+function sortCurs(list){const order=C().currencies;return [...new Set(list)].sort((a,b)=>{const ia=order.indexOf(a),ib=order.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});}
+function sgn(v){return v>0.004?'pos':v<-0.004?'neg':'';}
+
+/* ---------- rendering ---------- */
+const TABS=['kasy','panel','kliienty','zhurnal','zvit','zminy','nalashtuvannia','moia'];
+function myRole(){if(isOwner)return 'owner';const r=me.id&&roles[me.id];return r&&r.role||'none';}
+function myBox(){const r=me.id&&roles[me.id];return r&&r.box||'';}
+function isCashier(){return myRole()==='cashier';}
+function canEditOp(o){const r=myRole();return r==='owner'||((r==='full'||r==='cashier')&&!!o.by&&o.by===me.id);}
+function allowedTabs(){const r=myRole();return r==='owner'?TABS.filter(t=>t!=='moia'):(r==='full'||r==='viewer')?TABS.filter(t=>t!=='moia'&&t!=='nalashtuvannia'):r==='cashier'?['moia']:[];}
+function setTabFromHash(){const h=(location.hash||'').slice(1);ui.tab=TABS.includes(h)?h:'kasy';}
+function render(full){
+  document.querySelectorAll('nav.tabs a').forEach(a=>a.classList.toggle('on',a.dataset.tab===ui.tab||(a.dataset.tab==='zvit'&&ui.tab==='zminy')));
+  const nb=newAuditCount();const bg=document.getElementById('badge');if(bg){bg.hidden=!nb;bg.textContent=nb>99?'99+':String(nb);}
+  const role=myRole();const tabs=allowedTabs();
+  if(rolesLoaded&&tabs.length&&!tabs.includes(ui.tab))ui.tab=tabs[0];
+  document.getElementById('gear').classList.toggle('on',ui.tab==='nalashtuvannia');
+  document.getElementById('gear').hidden=role!=='owner';
+  document.querySelector('nav.tabs').hidden=!(role==='owner'||role==='full'||role==='viewer');
+  document.getElementById('fab').hidden=!(db&&canWrite&&cfgLoaded&&rolesLoaded&&role!=='none'&&C().boxes.length);
+  const v=document.getElementById('view');
+  if(authState!=='in'||!ownerLoaded||!ownerUid){
+    document.querySelector('nav.tabs').hidden=true;document.getElementById('fab').hidden=true;document.getElementById('gear').hidden=true;
+    v.dataset.tab='';
+    if(authState==='loading'||(authState==='in'&&!ownerLoaded)){v.innerHTML=`<div class="empty-state">Завантаження…</div>`;return;}
+    if(authState==='out'){v.innerHTML=`<div class="login"><h2>Baza Service</h2><p>Увійдіть своїм Google-акаунтом, щоб працювати з касою.</p><button class="gbtn" type="button" data-act="login">Увійти через Google</button></div>`;return;}
+    v.innerHTML=`<div class="card mig"><b>Перший запуск</b><div class="small muted">Ви перший, хто увійшов. Станьте власником і перенесіть дані зі старого застосунку: оберіть файл перенесення, який надіслав Claude.</div>
+      <input type="file" id="mig-file" accept=".json,application/json"><button class="btn primary" type="button" data-act="migrate">Стати власником і перенести дані</button>
+      <div class="small" id="mig-status"></div><button class="linkbtn" type="button" data-act="claimempty">Почати з нуля без перенесення</button></div>`;
+    return;
+  }
+  if(rolesLoaded&&role==='none'){v.dataset.tab='';v.innerHTML=`<div class="empty-state"><b>Доступ ще не надано.</b><br>Власник має призначити вам роль у застосунку. Після цього сторінка оновиться сама.</div>`;return;}
+  if(noDb){v.innerHTML=`<div class="empty-state"><b>Не вдалося завантажити дані.</b><br>Перевірте інтернет і відкрийте застосунок ще раз. Якщо не допоможе — напишіть власнику.</div>`;return;}
+  if(!cfgLoaded||!daysLoaded||!clientsLoaded||!rolesLoaded){v.innerHTML=`<div class="empty-state">Завантажую дані каси…</div>`;return;}
+  if(role==='none'){v.dataset.tab='';v.innerHTML=`<div class="empty-state"><b>Доступ ще не надано.</b><br>${me.id?'Вадим має призначити вам роль у застосунку. Після цього сторінка оновиться сама.':'Не вдалося визначити ваш акаунт. Увійдіть у Claude і відкрийте посилання ще раз.'}</div>`;return;}
+  if(full||!document.getElementById('dyn')||v.dataset.tab!==ui.tab){
+    v.dataset.tab=ui.tab;
+    v.innerHTML=(ui.tab==='zhurnal'?journalHead():ui.tab==='zvit'?reportHead():ui.tab==='zminy'?auditHead():'')+'<div id="dyn"></div>';
+  }
+  const M=model();curM=M;
+  document.getElementById('dyn').innerHTML=ui.tab==='kasy'?kasyBody(M):ui.tab==='panel'?panelBody(M):ui.tab==='kliienty'?clientsBody(M):ui.tab==='zhurnal'?journalBody(M):ui.tab==='zvit'?reportBody(M):ui.tab==='zminy'?auditBody():ui.tab==='moia'?cashierBody(M):settingsBody(M);
+}
+function cashierBody(M){
+  const b=myBox();const box=C().boxes.find(x=>x.id===b);
+  if(!box)return `<div class="empty-state"><b>Вам ще не призначено касу.</b><br>Зверніться до Вадима.</div>`;
+  const bb=M.boxes[b]||{};const ks=sortCurs(Object.keys(bb).filter(k=>bb[k]!==0));
+  let h=`<section class="hero"><div class="lbl">${esc(box.name)}</div><div class="num">${ks.length?ks.map(k=>fmt(bb[k],k)).join('<br>'):'0 ₴'}</div></section>`;
+  const saved=ui.f;ui.f={from:'',to:'',box:b,client:'',type:'',cat:'',q:''};
+  h+=`<h2>Мої операції</h2>`+journalBody(M);ui.f=saved;
+  return h;
+}
+function missingWarn(M){
+  if(!M.missing.size)return '';
+  return `<div class="warn-card">Немає курсу для ${[...M.missing].map(esc).join(', ')}, тому суми в гривні неточні. Вкажіть курс у <a href="#nalashtuvannia">налаштуваннях</a> або запишіть обмін.</div>`;
+}
+
+function panelBody(M){
+  const c=C();
+  if(!c.boxes.length)return `<div class="empty-state"><b>Ще немає жодної каси.</b><br>${canAdmin?'Додайте каси в налаштуваннях (шестерня вгорі).':'Власник ще не налаштував каси.'}</div>`;
+  const m=thisMonth();const mm=M.months[m]||{inc:0,exp:0,oz:0};const plM=r2(mm.inc-mm.exp-mm.oz);
+  let h=dispToggle()+`<section class="hero"><div class="lbl">Баланс</div><div class="num">${fmtD(M.balance)}</div>
+    <div class="sub">= у касах + мені винні − я винен</div></section>`;
+  h+=`<div class="tiles">
+    <button type="button" class="tile" data-act="go" data-v="kasy"><span class="l">У касах</span><span class="v">${fmtD(M.cashU)}</span><span class="go">Каси →</span></button>
+    <button type="button" class="tile" data-act="go" data-v="kliienty"><span class="l">Мені винні</span><span class="v pos">${fmtD(M.owedToMe)}</span><span class="go">Клієнти →</span></button>
+    <button type="button" class="tile" data-act="go" data-v="kliienty"><span class="l">Я винен</span><span class="v neg">${fmtD(-M.iOwe)}</span><span class="go">Клієнти →</span></button>
+  </div>`;
+  h+=`<h2>Результат</h2><div class="stats" style="margin-top:0">
+    <div class="stat"><div class="l">P&amp;L за ${esc(monthLabel(m).split(' ')[0].toLowerCase())}</div><div class="v ${sgn(plM)}">${fmtD(plM,true)}</div></div>
+    <div class="stat"><div class="l">P&amp;L з початку</div><div class="v ${sgn(M.plAll)}">${fmtD(M.plAll,true)}</div></div>
+    <div class="stat"><div class="l">Курсова різниця</div><div class="v ${sgn(M.fxDiff)}">${fmtD(M.fxDiff,true)}</div></div>
+  </div>`;
+  h+=`<div class="check">Баланс = P&amp;L з початку + курсова різниця. ${rateLine(M)}</div>`;
+  h+=missingWarn(M);
+  if(!M.ops.length)h+=`<div class="empty-state" style="margin-top:12px"><b>Почніть з першої операції.</b> Натисніть «+», оберіть «+», від кого: клієнт «Інвестор 1», і внесіть суму, яку отримали.</div>`;
+  return h;
+}
+function kasyBody(M){
+  const c=C();
+  if(!c.boxes.length)return `<div class="empty-state"><b>Ще немає жодної каси.</b><br>${canAdmin?'Додайте каси в налаштуваннях (шестерня вгорі).':'Власник ще не налаштував каси.'}</div>`;
+  const cash=M.cash;const curs=sortCurs(Object.keys(cash).filter(k=>cash[k]!==0));
+  let h=dispToggle()+`<section class="hero"><div class="lbl">У касах</div><div class="num">${fmtD(M.cashU)}</div>
+    <div class="sub">${curs.length?curs.map(k=>fmt(cash[k],k)).join(' · '):'каси порожні'}</div></section>`;
+  h+=missingWarn(M);
+  h+=`<h2>Каси</h2><div class="boxes">`;
+  for(const b of c.boxes){
+    const bb=M.boxes[b.id]||{};const ks=sortCurs(Object.keys(bb).filter(k=>bb[k]!==0));
+    if(b.archived&&!ks.length)continue;
+    let eq=0;for(const k of ks)eq+=bb[k]*M.nowR(k);
+    h+=`<button type="button" class="box${b.archived?' archived':''}" data-act="boxjournal" data-v="${esc(b.id)}"><span class="name">${esc(b.name)}</span>${ks.length?ks.map(k=>`<span class="bal"><span class="muted">${esc(k)}</span><span class="${bb[k]<0?'neg':''}">${fmt(bb[k],k)}</span></span>`).join('')+(ks.some(k=>k!==BASE)?`<span class="eq">≈ ${fmtD(eq)}</span>`:''):'<span class="empty">порожньо</span>'}</button>`;
+  }
+  h+=`</div><div class="legend">Натисніть на касу, щоб побачити її операції.</div>`;
+  const d=ui.eodDate||today();
+  h+=`<h2>Залишки на дату</h2><div class="card" style="margin-bottom:8px"><label class="fld" style="margin:0"><span>Кінець дня</span><input type="date" id="eod-date" data-eod="1" value="${esc(d)}" max="${today()}"></label></div>${eodTable(M.ops,d)}`;
+  return h;
+}
+function rateLine(M){
+  const cs=C().currencies.filter(k=>k!==BASE);
+  return cs.map(k=>{const r=currentRate(k,M.hist);return r?`1 ${esc(k)} = ${fmtRate(r)} ₴`:''}).filter(Boolean).join(', ');
+}
+function clientRows(M){
+  const out=[];
+  for(const cl of clientList()){out.push(rowFor(M,cl.id));}
+  for(const id in M.cli){if(!out.some(r=>r.id===id))out.push(rowFor(M,id));}
+  return out.sort((a,b)=>Math.abs(b.u)-Math.abs(a.u)||String(a.name).localeCompare(String(b.name),'uk'));
+}
+function rowFor(M,id){const bal=M.cli[id]||{};let u=0;for(const c in bal)u+=bal[c]*M.nowR(c);return {id,name:clientName(id),bal,u:r2(u),archived:clients[id]&&clients[id].archived};}
+let curM=null;
+try{ui.disp=localStorage.getItem('kasa.disp')||BASE;}catch(e){ui.disp=BASE;}
+function dispRate(){const c=ui.disp;if(!c||c===BASE||!curM)return null;return currentRate(c,curM.hist);}
+function fmtD(n,signed){const r=dispRate();if(!r)return fmtU(n,signed);return fmt(Math.round((+n||0)/r),ui.disp,signed);}
+function dispToggle(){
+  if(!curM)return '';const cs=[BASE,...C().currencies.filter(k=>k!==BASE&&currentRate(k,curM.hist))];
+  if(cs.length<2)return '';const cur=cs.includes(ui.disp)?ui.disp:BASE;
+  return `<div class="dbar"><span class="small muted">Показувати в</span><div class="dtog" role="group" aria-label="Валюта показу">${cs.map(k=>`<button type="button" data-act="disp" data-v="${esc(k)}" class="${k===cur?'on':''}">${esc(SYM[k]||k)}</button>`).join('')}</div></div>`;
+}
+function rateNote(M){
+  const parts=C().currencies.filter(k=>k!==BASE).map(k=>{const r=currentRate(k,M.hist);if(!r)return '';const man=C().rates&&+C().rates[k]>0;const l=lastExchange(k,M.hist);return `1 ${esc(SYM[k]||k)} = ${fmtRate(r)} ₴ · ${man?'вказано вручну':'з обміну '+shortDate(l.date).slice(0,5)}`;}).filter(Boolean);
+  return parts.length?`<div class="legend" style="margin:-4px 0 12px">Курс: ${parts.join('; ')}</div>`:'';
+}
+function rateMini(M){
+  const items=C().currencies.filter(k=>k!==BASE).map(k=>{const r=currentRate(k,M.hist);if(!r)return '';const man=C().rates&&+C().rates[k]>0;const l=lastExchange(k,M.hist);
+    return `<div class="ri"><span class="rk">1 ${esc(SYM[k]||k)}</span><b>${fmtRate(r)} ₴</b><span class="rs">${man?'вручну':'обмін '+shortDate(l.date).slice(0,5)}</span></div>`;}).filter(Boolean);
+  return items.length?`<div class="ratebox"><span class="rl">Курс</span>${items.join('')}</div>`:'';
+}
+function curBreak(map,sign){const ks=sortCurs(Object.keys(map).filter(k=>Math.abs(map[k])>=0.005));return ks.length?ks.map(k=>{const v=sign*map[k];return `<span class="${v>0?'pos':'neg'}">${fmt(v,k)}</span>`;}).join(' · '):'—';}
+function clientRowHtml(r){
+  const ks=sortCurs(Object.keys(r.bal).filter(k=>Math.abs(r.bal[k])>=0.005));
+  const dir=r.u>0.004?1:r.u<-0.004?-1:(ks.length?Math.sign(r.bal[ks[0]]):0);const cls=dir>0?'pos':'neg';
+  const lines=ks.length?ks.map(k=>{const v=r.bal[k];return `<span class="${v>0?'pos':'neg'}">${fmt(v,k)} <span class="w">${v>0?'винен мені':'я винен'}</span></span>`;}).join(''):'<span class="muted small">розраховані</span>';
+  const eq=(ks.length>1||ks.some(k=>k!==BASE))?`<span class="eq">Разом ≈ <b class="${cls}">${fmtD(r.u)}</b> · ${r.u>0?'мені винні':'я винен'}</span>`:'';
+  return `<button type="button" class="cl${r.archived?' archived':''}" data-act="clientjournal" data-v="${esc(r.id)}"><span class="n">${esc(r.name)}${eq?'<br>'+eq:''}</span><span class="b">${lines}</span></button>`;
+}
+function clientsBody(M){
+  const rows=clientRows(M).filter(r=>!r.archived||Math.abs(r.u)>=0.5);
+  let h=dispToggle()+`<div class="duo"><div class="stat"><div class="l">Мені винні</div><div class="v pos">${fmtD(M.owedToMe)}</div><div class="bd">${curBreak(M.owedCur,1)}</div></div><div class="stat"><div class="l">Я винен</div><div class="v neg">${fmtD(-M.iOwe)}</div><div class="bd">${curBreak(M.oweCur,-1)}</div></div></div>`+rateNote(M);
+  h+=missingWarn(M);
+  h+=rows.length?`<div class="clients">${rows.map(clientRowHtml).join('')}</div>`:`<div class="empty-state">Клієнтів ще немає.</div>`;
+  if(canWrite)h+=`<div class="addrow"><input id="nc-name" placeholder="Новий клієнт, напр. Петро"><button class="btn" type="button" data-act="addclient">Додати</button></div>`;
+  h+=`<div class="legend">Натисніть на клієнта, щоб побачити всі розрахунки з ним. Червоним з «−» — я винен, зеленим без знака — винен мені. «Разом» — усе в гривні за поточним курсом.</div>`;
+  return h;
+}
+
+function journalHead(){
+  const c=C(),f=ui.f;
+  const cats=[...new Set([...c.categories,'Основні засоби',...c.incomeCategories])];
+  return `<div class="card"><div class="filters">
+    <label>З дати<input type="date" id="jf-from" data-jf="from" value="${esc(f.from)}"></label>
+    <label>По дату<input type="date" id="jf-to" data-jf="to" value="${esc(f.to)}"></label>
+    <label>Каса<select id="jf-box" data-jf="box">${opt('','Усі каси',f.box)}${c.boxes.map(b=>opt(b.id,b.name,f.box)).join('')}</select></label>
+    <label>Клієнт<select id="jf-client" data-jf="client">${opt('','Усі клієнти',f.client)}${clientList(f.client).map(x=>opt(x.id,x.name,f.client)).join('')}</select></label>
+    <label>Тип<select id="jf-type" data-jf="type">${opt('','Усі типи',f.type)}${Object.keys(TYPES).map(k=>opt(k,TYPES[k].label,f.type)).join('')}</select></label>
+    <label>Вид<select id="jf-cat" data-jf="cat">${opt('','Усі',f.cat)}${cats.map(x=>opt(x,x,f.cat)).join('')}</select></label>
+    <label class="full">Пошук у коментарях<input id="jf-q" data-jf="q" value="${esc(f.q)}" placeholder="лампочки, болгарка…"></label>
+  </div><div class="row-actions"><button class="btn" type="button" data-act="jreset">Скинути фільтри</button>${downloads?'<button class="btn" type="button" data-act="csv">Завантажити CSV</button>':''}</div></div>`;
+}
+function catOf(o){return o.type==='expense'&&o.isAsset?'Основні засоби':o.category;}
+function filteredOps(ops){
+  const f=ui.f,q=f.q.trim().toLowerCase();
+  return ops.filter(o=>{
+    if(f.from&&o.date<f.from)return false;if(f.to&&o.date>f.to)return false;
+    if(f.type&&o.type!==f.type)return false;
+    if(f.cat&&catOf(o)!==f.cat)return false;
+    if(f.box&&!effects(o).some(e=>e[0]===f.box))return false;
+    if(f.client&&o.client!==f.client)return false;
+    if(q&&!((o.comment||'')+' '+(o.category||'')+' '+(o.assetName||'')).toLowerCase().includes(q))return false;
+    return true;
+  });
+}
+function opTitle(o){
+  const via=o.payVia==='client'?'через '+clientName(o.client):null;
+  switch(o.type){
+    case 'expense':return [o.isAsset?'ОЗ: '+(o.assetName||'без назви'):(o.category||'Витрата'),via||boxName(o.from)];
+    case 'income':return [o.category||'Дохід',via||boxName(o.to)];
+    case 'clientIn':return ['Від: '+clientName(o.client),'в '+boxName(o.to)];
+    case 'clientOut':return ['Віддав: '+clientName(o.client),'з '+boxName(o.from)];
+    case 'transfer':return [boxName(o.from)+' → '+boxName(o.to),'Переказ'];
+    case 'exchange':return ['Обмін '+o.cur+' → '+o.cur2,boxName(o.from)+(o.to!==o.from?' → '+boxName(o.to):'')+' · курс '+fmtRate(o.rate)];
+  }
+  return ['?',''];
+}
+function signed(list){return list.map(([,cur,a])=>`<span class="${a<0?'c-out':'c-in'}">${fmt(a,cur,true)}</span>`).join('');}
+function opAmount(o){
+  if(ui.f.box)return signed(effects(o).filter(x=>x[0]===ui.f.box));
+  if(ui.f.client)return signed(clientEffects(o).filter(x=>x[0]===ui.f.client));
+  if(o.type==='transfer')return `<span class="c-move">↔ ${fmt(o.amount,o.cur)}</span>`;
+  if(o.payVia==='client')return signed([[null,o.cur,o.type==='expense'?-o.amount:o.amount]]);
+  return signed(effects(o));
+}
+function journalBody(M){
+  const ops=filteredOps(M.ops);
+  let legend='';
+  if(ui.f.client){const r=rowFor(M,ui.f.client);const ks=sortCurs(Object.keys(r.bal).filter(k=>Math.abs(r.bal[k])>=0.005));legend=`<div class="legend">Сальдо ${esc(r.name)}: ${ks.length?ks.map(k=>`<b class="${r.bal[k]>0?'pos':'neg'}">${r.bal[k]>0?'винен вам':'ви винні'} ${fmt(Math.abs(r.bal[k]),k)}</b>`).join(', '):'розраховані'}. У списку «+» — клієнт винен вам більше, «−» — ви йому.</div>`;}
+  if(!ops.length)return legend+`<div class="empty-state" style="margin-top:14px">${M.ops.length?'Немає операцій за цими фільтрами.':'<b>Журнал порожній.</b> Натисніть «+», щоб записати першу операцію.'}</div>`;
+  const byDay={};for(const o of ops)(byDay[o.date]=byDay[o.date]||[]).push(o);
+  const ds=Object.keys(byDay).sort().reverse();
+  let h=legend;
+  for(const d of ds.slice(0,ui.dayLimit)){
+    const list=byDay[d].slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
+    const out={},inn={};
+    for(const o of list){if(o.type==='expense')out[o.cur]=r2((out[o.cur]||0)+o.amount);if(o.type==='income')inn[o.cur]=r2((inn[o.cur]||0)+o.amount);}
+    const tot=[...Object.keys(inn).map(k=>`<span class="c-in">дохід ${fmt(inn[k],k)}</span>`),...Object.keys(out).map(k=>`<span class="c-out">витрати ${fmt(out[k],k)}</span>`)].join('');
+    h+=`<div class="day"><div class="day-h"><span class="d">${esc(dayLabel(d))}</span><span class="tot">${tot}</span></div><div class="ops">`;
+    for(const o of list){const [t,s]=opTitle(o);const ty=TYPES[o.type]||{label:'?',cls:'move'};
+      h+=`<button type="button" class="op" data-act="opview" data-v="${esc(o.day)}|${esc(o.id)}"><span class="tagcol"><span class="tag bg-${ty.cls}">${ty.label}</span><span class="who-s">${esc(o.by&&names[o.by]||'')}</span></span><span style="min-width:0"><div class="t">${esc(t)}</div><div class="s">${esc(s)}${o.editedTs?' · змінено':''}${o.comment?' · '+esc(o.comment):''}</div></span><span class="a">${opAmount(o)}</span></button>`;}
+    h+=`</div>`+(isCashier()?'':`<button type="button" class="linkbtn" data-act="eod" data-v="${d}">${ui.openEod.has(d)?'Сховати залишки':'Залишки в касах на кінець дня'}</button>`);
+    if(!isCashier()&&ui.openEod.has(d))h+=`<div class="eod">${eodTable(M.ops,d)}</div>`;
+    h+=`</div>`;
+  }
+  if(ds.length>ui.dayLimit)h+=`<button class="btn more" type="button" data-act="moredays">Показати ще дні (${ds.length-ui.dayLimit})</button>`;
+  return h;
+}
+function eodTable(all,d){
+  const bal=boxBalances(all,d);const curs=sortCurs(Object.values(bal).flatMap(x=>Object.keys(x)));
+  const boxes=C().boxes.filter(b=>bal[b.id]&&Object.values(bal[b.id]).some(v=>v!==0));
+  if(!boxes.length)return '<div class="muted small">Каси порожні.</div>';
+  const tot=totalsByCur(bal);
+  return `<div class="tbl-wrap"><table><thead><tr><th>Каса</th>${curs.map(k=>`<th>${esc(k)}</th>`).join('')}</tr></thead><tbody>${boxes.map(b=>`<tr><td>${esc(b.name)}</td>${curs.map(k=>`<td class="${(bal[b.id][k]||0)<0?'neg':''}">${bal[b.id][k]?fmt(bal[b.id][k],k):'—'}</td>`).join('')}</tr>`).join('')}<tr class="total"><td>Разом</td>${curs.map(k=>`<td>${fmt(tot[k]||0,k)}</td>`).join('')}</tr></tbody></table></div>`;
+}
+
+function reportHead(){
+  const m=ui.rep.month;
+  return `<div class="card"><div class="filters"><label class="full">Місяць<input type="month" id="rf-month" data-rf="month" value="${esc(m)}"></label></div>
+  <div class="row-actions"><button class="btn${m===thisMonth()?' on':''}" type="button" data-act="rp" data-v="month">Цей місяць</button><button class="btn${!m?' on':''}" type="button" data-act="rp" data-v="all">За весь час</button></div></div>`;
+}
+function reportBody(M){
+  const m=ui.rep.month;
+  const ops=M.ops.filter(o=>!m||o.date.slice(0,7)===m);
+  const inc={},exp={},oz=[],byWho={};
+  let tInc=0,tExp=0,tOz=0;
+  for(const o of ops){
+    if(o.type!=='income'&&o.type!=='expense')continue;
+    const u=(+o.amount||0)*M.opR(o.cur,o.date);
+    if(o.type==='income'){const k=o.category||'Дохід';inc[k]=(inc[k]||0)+u;tInc+=u;}
+    else{
+      if(o.isAsset){oz.push({o,u});tOz+=u;}else{const k=o.category||'Інше';exp[k]=(exp[k]||0)+u;tExp+=u;}
+      const who=o.payVia==='client'?'через '+clientName(o.client):boxName(o.from);byWho[who]=(byWho[who]||0)+u;
+    }
+  }
+  const res=tInc-tExp-tOz;
+  const title=m?monthLabel(m):'Весь час';
+  let h=missingWarn(M);
+  if(!tInc&&!tExp&&!tOz)h+=`<div class="empty-state" style="margin-top:14px">За ${m?'цей місяць':'весь час'} доходів і витрат немає.</div>`;
+  else{
+    const sorted=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]);
+    h+=`<h2>P&amp;L · ${esc(title)}</h2><div class="tbl-wrap"><table><tbody>`;
+    h+=`<tr class="sec"><td>Доходи</td><td>${fmtU(tInc)}</td></tr>`;
+    for(const [k,v] of sorted(inc))h+=`<tr><td class="ind">${esc(k)}</td><td>${fmtU(v)}</td></tr>`;
+    h+=`<tr class="sec"><td>Поточні витрати</td><td>${fmtU(tExp)}</td></tr>`;
+    for(const [k,v] of sorted(exp))h+=`<tr><td class="ind">${esc(k)}</td><td>${fmtU(v)}</td></tr>`;
+    h+=`<tr class="sec"><td>Основні засоби</td><td>${fmtU(tOz)}</td></tr>`;
+    for(const {o,u} of oz)h+=`<tr><td class="ind">${esc(o.assetName||'без назви')}</td><td>${fmtU(u)}</td></tr>`;
+    h+=`<tr class="total"><td>Результат (P&amp;L)</td><td class="${sgn(res)}">${fmtU(res,true)}</td></tr>`;
+    if(!m)h+=`<tr><td>Курсова різниця</td><td class="${sgn(M.fxDiff)}">${fmtU(M.fxDiff,true)}</td></tr><tr class="total"><td>Баланс</td><td class="${sgn(M.balance)}">${fmtU(M.balance)}</td></tr>`;
+    h+=`</tbody></table></div>`;
+    const spent=tExp+tOz;
+    if(spent>0){
+      h+=`<h2>Витрачено ${fmtU(spent)}</h2><div class="card bars">`;
+      const all=[...sorted(exp).map(([k,v])=>[k,v,false]),...(tOz?[['Основні засоби',tOz,true]]:[])].sort((a,b)=>b[1]-a[1]);
+      const max=all[0][1];
+      for(const [n,v,isOz] of all)h+=`<div class="bar-row"><span class="n">${esc(n)}</span><span class="v">${fmtU(v)} <span class="muted small">${Math.round(v/spent*100)}%</span></span><div class="track"><div class="fill${isOz?' oz':''}" style="width:${(v/max*100).toFixed(1)}%"></div></div></div>`;
+      h+=`</div><div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>Хто витратив</th><th>Сума</th></tr></thead><tbody>${sorted(byWho).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${fmtU(v)}</td></tr>`).join('')}</tbody></table></div>`;
+    }
+  }
+  const ms=Object.keys(M.months).sort().reverse();
+  if(ms.length){
+    h+=`<h2>P&amp;L по місяцях</h2><div class="tbl-wrap"><table><thead><tr><th>Місяць</th><th>Доходи</th><th>Витрати</th><th>ОЗ</th><th>Результат</th></tr></thead><tbody>`;
+    for(const k of ms){const x=M.months[k];const r=x.inc-x.exp-x.oz;h+=`<tr><td>${esc(monthLabel(k))}</td><td>${fmtU(x.inc)}</td><td>${fmtU(x.exp)}</td><td>${fmtU(x.oz)}</td><td class="${sgn(r)}">${fmtU(r,true)}</td></tr>`;}
+    h+=`</tbody></table></div>`;
+  }
+  const allOz=M.ops.filter(o=>o.type==='expense'&&o.isAsset);
+  if(allOz.length){
+    let t=0;
+    h+=`<h2>Список основних засобів</h2><div class="tbl-wrap"><table><thead><tr><th>Назва</th><th>Дата</th><th>Ціна</th><th>У гривні</th></tr></thead><tbody>`;
+    for(const o of allOz.slice().reverse()){const u=o.amount*M.opR(o.cur,o.date);t+=u;h+=`<tr><td>${esc(o.assetName||'без назви')}</td><td>${shortDate(o.date)}</td><td>${fmt(o.amount,o.cur)}</td><td>${fmtU(u)}</td></tr>`;}
+    h+=`<tr class="total"><td>Разом</td><td></td><td></td><td>${fmtU(t)}</td></tr></tbody></table></div>`;
+  }
+  h+=`<div style="margin-top:26px">${auditCard()}</div>`;
+  return h;
+}
+
+function peopleSection(){
+  if(!isOwner)return '';
+  const ids=[...new Set([...Object.keys(members),...Object.keys(roles)])].filter(i=>i!==me.id);
+  const ROLES=[['none','Немає доступу'],['viewer','Тільки перегляд'],['cashier','Касир'],['full','Повний доступ']];
+  let h=`<h2>Люди і права</h2><div class="card"><div class="list">`;
+  h+=`<div class="prow"><div class="pn"><b>${esc(me.name||'Ви')}</b><span class="small muted">Власник: усе, включно з налаштуваннями і правами</span></div></div>`;
+  for(const id of ids){
+    const r=roles[id]||{};const role=r.role||'none';
+    h+=`<div class="prow"><div class="pn"><b>${esc(names[id]||'Без імені')}</b>${members[id]&&members[id].email?`<span class="small muted">${esc(members[id].email)}</span>`:''}<span class="small muted">${role==='none'?'очікує на доступ':role==='viewer'?'бачить усе, нічого не змінює':role==='cashier'?'бачить тільки свою касу':'бачить усе, змінює свої операції'}</span></div>
+      <div class="pc"><select id="role-${esc(id)}" data-roleuid="${esc(id)}" aria-label="Роль">${ROLES.map(([v,l])=>opt(v,l,role)).join('')}</select>
+      ${role==='cashier'?`<select id="rbox-${esc(id)}" data-roleboxuid="${esc(id)}" aria-label="Каса">${opt('','— каса —',r.box||'')}${activeBoxes(r.box).map(b=>opt(b.id,b.name,r.box||'')).join('')}</select>`:''}</div></div>`;
+  }
+  if(!ids.length)h+=`<div class="muted small">Тут з'являться люди, щойно вони відкриють застосунок за вашим запрошенням.</div>`;
+  h+=`</div><div class="hint" style="margin-top:8px">Надішліть людині посилання bazaservice.github.io. Після входу через Google вона з'явиться тут — оберіть їй роль. Людина з'явиться тут після першого входу, тоді оберіть їй роль.</div></div>`;
+  return h;
+}
+async function saveRole(id,patch){
+  const next=JSON.parse(JSON.stringify(roles));next[id]=Object.assign({},next[id]||{},patch);
+  if(next[id].role!=='cashier')delete next[id].box;
+  roles=next;render(true);
+  try{await db.doc('roles/main').set({users:next});toast('Права збережено');}catch(e){toast('Не вдалося зберегти права');}
+}
+async function resolveMemberNames(){
+  if(!user)return;const ids=[...new Set([...Object.keys(members),...Object.keys(roles)])].filter(i=>!(i in names));if(!ids.length)return;
+  try{const ps=await user.profiles(ids);for(const i of ids)names[i]=ps[i]&&ps[i].name||'';}catch(e){}
+  if(ui.tab==='nalashtuvannia'&&!isTyping())render(true);
+}
+function settingsBody(M){
+  const c=C();const dis=canAdmin?'':' disabled';
+  let h=canAdmin?'':`<div class="empty-state">Каси, види, валюти і курс змінює лише власник або редактор. Клієнтів можете додавати і перейменовувати.</div>`;
+  const arrows=(act,k,i,n)=>`<button class="mv" type="button" data-act="${act}" data-k="${k}" data-i="${i}" data-d="-1" aria-label="Вгору"${i===0?' disabled':''}>↑</button><button class="mv" type="button" data-act="${act}" data-k="${k}" data-i="${i}" data-d="1" aria-label="Вниз"${i===n-1?' disabled':''}>↓</button>`;
+  h+=`<h2>Каси</h2><div class="card"><div class="list">`;
+  c.boxes.forEach((b,i)=>{h+=`<div class="li${b.archived?' archived':''}"><input id="sb-n-${i}" value="${esc(b.name)}" data-sb="name" data-i="${i}" aria-label="Назва каси"${dis}><span class="ctl">${canAdmin?arrows('mvbox','',i,c.boxes.length):''}<button class="btn" type="button" data-act="sbarch" data-i="${i}"${dis}>${b.archived?'Повернути':'В архів'}</button></span></div>`;});
+  if(!c.boxes.length)h+=`<div class="muted small">Кас ще немає.</div>`;
+  h+=`</div>${canAdmin?`<div class="addrow"><input id="nb-name" placeholder="Нова каса, напр. Олег каса"><button class="btn" type="button" data-act="addbox">Додати</button></div>`:''}<div class="hint" style="margin-top:6px">Назва зберігається сама. Каса — це гроші, які твої, де б вони не лежали (у тебе, у Віталія під звіт). Кому позичив або в кого взяв — це клієнт.</div></div>`;
+  /* rates */
+  const fx=c.currencies.filter(k=>k!==BASE);
+  if(fx.length){
+    h+=`<h2>Курс на сьогодні</h2><div class="card"><div class="list">`;
+    for(const k of fx){const l=lastExchange(k,M.hist);const man=c.rates&&c.rates[k];
+      h+=`<div class="li rate"><b>1 ${esc(k)} =</b><input id="rate-${esc(k)}" inputmode="decimal" data-rate="${esc(k)}" value="${man?String(man).replace('.',','):''}" placeholder="${l?'авто: '+fmtRate(l.rate)+' ₴ (обмін '+shortDate(l.date)+')':'вкажіть курс, ₴'}"${dis}></div>`;}
+    h+=`</div><div class="hint" style="margin-top:6px">Порожнє поле — береться курс останнього обміну. Від курсу залежать баланс і курсова різниця, P&amp;L не змінюється.</div></div>`;
+  }
+  /* clients */
+  const cl=clientList(null).concat(Object.keys(clients).filter(id=>clients[id].archived).map(id=>Object.assign({id},clients[id])));
+  h+=`<h2>Клієнти</h2><div class="card"><div class="list">`;
+  for(const x of cl){h+=`<div class="li${x.archived?' archived':''}"><input id="sc-${esc(x.id)}" value="${esc(x.name)}" data-sc="${esc(x.id)}" aria-label="Клієнт"${canWrite?'':' disabled'}><button class="btn" type="button" data-act="carch" data-v="${esc(x.id)}"${canWrite?'':' disabled'}>${x.archived?'Повернути':'В архів'}</button></div>`;}
+  if(!cl.length)h+=`<div class="muted small">Клієнтів ще немає.</div>`;
+  h+=`</div>${canWrite?`<div class="addrow"><input id="nc-name2" placeholder="Новий клієнт"><button class="btn" type="button" data-act="addclient2">Додати</button></div>`:''}</div>`;
+  const chips=(key,title,ph)=>`<h2>${title}</h2><div class="card"><div class="olist">${c[key].map((x,i)=>`<div class="orow"><span class="nm">${esc(x)}</span>${canAdmin?`<span class="ctl">${arrows('mvchip',key,i,c[key].length)}<button class="mv del" type="button" aria-label="Видалити ${esc(x)}" data-act="rmchip" data-k="${key}" data-i="${i}">×</button></span>`:''}</div>`).join('')}</div>${canAdmin?`<div class="addrow"><input id="add-${key}" placeholder="${ph}"><button class="btn" type="button" data-act="addchip" data-k="${key}">Додати</button></div>`:''}</div>`;
+  h+=chips('categories','Види витрат','Напр. Електрика');
+  h+=chips('incomeCategories','Види доходу','Напр. Повернення за товар');
+  h+=chips('currencies','Валюти','Код, напр. PLN');
+  return peopleSection()+h;
+}
+
+/* ---------- history of changes ---------- */
+function cleanOp(o){if(!o)return null;const c=Object.assign({},o);delete c.id;delete c.day;return c;}
+function newAuditCount(){return audit.filter(e=>e.action!=='create'&&e.ts>auditSeen&&e.by!==me.id).length;}
+async function logAudit(action,opId,before,after){
+  if(!db||!me.id)throw {code:'no_id'};
+  const ts=Date.now();const eid=ts.toString(36)+Math.random().toString(36).slice(2,7);
+  const entry={ts,action,opId,before:before||null,after:after||null,by:me.id};
+  const d=new Date(ts);
+  await db.doc('audit/'+me.id+'/months/'+d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())).update({e:{[eid]:entry}});
+  await db.doc('audit/'+me.id).set({last:ts});
+}
+const FIELDS=[['date','Дата',v=>v?shortDate(v):''],['type','Тип',v=>TYPES[v]?TYPES[v].label:(v||'')],['from','З каси',v=>v?boxName(v):''],['to','В касу',v=>v?boxName(v):''],['client','Клієнт',v=>v?clientName(v):''],['amount','Сума',(v,o)=>v!=null?fmt(v,o.cur):''],['cur','Валюта',v=>v||''],['amount2','Отримано',(v,o)=>v!=null?fmt(v,o.cur2):''],['cur2','Валюта отримано',v=>v||''],['rate','Курс',v=>v!=null?fmtRate(v):''],['category','Вид',v=>v||''],['assetName','Назва ОЗ',v=>v||''],['comment','Коментар',v=>v||'']];
+function diffOps(a,b){const out=[];for(const [k,l,f] of FIELDS){const x=f(a[k],a),y=f(b[k],b);if(x!==y)out.push([l,x||'—',y||'—']);}return out;}
+const ACT={create:['Додано','in'],edit:['Змінено','fx'],delete:['Видалено','out']};
+function entryHtml(e,showTitle){
+  const o=e.after||e.before||{};const [t]=o.type?opTitle(o):['Операція'];
+  const amt=o.type==='exchange'?fmt(o.amount,o.cur)+' → '+fmt(o.amount2,o.cur2):o.amount!=null?fmt(o.amount,o.cur):'';
+  const old=o.date&&o.date<new Date(e.ts-3*864e5).toISOString().slice(0,10);
+  const isNew=e.action!=='create'&&e.ts>auditSeen&&e.by!==me.id;
+  let h=`<div class="au${isNew?' new':''}"><div class="au-h"><span class="tag bg-${ACT[e.action][1]}">${ACT[e.action][0]}</span>${showTitle?`<span class="t">${esc(t)}</span><span class="amt">${esc(amt)}</span>`:''}</div>`;
+  h+=`<div class="s">${esc(names[e.by]||'Хтось')} · ${esc(when(e.ts))}${o.date?' · операція від '+shortDate(o.date):''}${old&&e.action!=='create'?' · <b class="neg">стара операція</b>':''}${isNew?' · <b>нове</b>':''}${e.backfill?' · відновлено з даних':''}</div>`;
+  if(e.action==='edit'&&e.before&&e.after){const d=diffOps(e.before,e.after);h+=d.length?`<div class="df">${d.map(([l,x,y])=>`<div><span class="muted">${esc(l)}:</span> <s>${esc(x)}</s> → <b>${esc(y)}</b></div>`).join('')}</div>`:'<div class="df muted">Без змін у полях</div>';}
+  return h+'</div>';
+}
+function auditCard(){
+  const ch=audit.filter(e=>e.action!=='create').length;const n=newAuditCount();
+  return `<div class="card audit-card"><div><b>Історія змін</b><div class="small muted">${ch?`${ch} змін і видалень`:'Змін і видалень ще не було'}${n?` · <b class="neg">${n} нових</b>`:''}</div></div><button class="btn" type="button" data-act="goaudit">Відкрити</button></div>`;
+}
+function auditHead(){
+  return `<div class="card"><div class="row-actions" style="margin-top:0"><button class="btn${!ui.audit.all?' on':''}" type="button" data-act="aufilter" data-v="ch">Зміни і видалення</button><button class="btn${ui.audit.all?' on':''}" type="button" data-act="aufilter" data-v="all">Усі дії</button><button class="btn" type="button" data-act="auseen">Позначити переглянутим</button></div>
+  <div class="legend">Історію записує застосунок при кожному додаванні, зміні чи видаленні. Змінити чи видалити її з застосунку неможливо.</div></div>`;
+}
+function auditBody(){
+  if(!auditLoaded)return `<div class="empty-state" style="margin-top:14px">Завантажую історію…</div>`;
+  const list=audit.filter(e=>ui.audit.all||e.action!=='create').sort((a,b)=>b.ts-a.ts);
+  if(!list.length)return `<div class="empty-state" style="margin-top:14px">${ui.audit.all?'Історія порожня.':'Змін і видалень ще не було.'}</div>`;
+  let h='',cur='';
+  for(const e of list.slice(0,ui.audit.limit)){
+    const d=new Date(e.ts);const k=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    if(k!==cur){if(cur)h+='</div>';cur=k;h+=`<div class="day-h" style="margin-top:18px"><span class="d">${esc(dayLabel(k))}</span></div><div class="ops">`;}
+    h+=entryHtml(e,true);
+  }
+  h+='</div>';
+  if(list.length>ui.audit.limit)h+=`<button class="btn more" type="button" data-act="aumore">Показати ще (${list.length-ui.audit.limit})</button>`;
+  return h;
+}
+function onAudit(){auditLoaded=true;resolveNames();if(!isTyping())render(ui.tab==='zvit');}
+
+/* ---------- op detail ---------- */
+function findOp(key){const [d,id]=key.split('|');const o=days[d]&&days[d][id];return o&&!o.deleted?Object.assign({},o,{id,day:d}):null;}
+function when(ts){return ts?new Date(ts).toLocaleString('uk-UA',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';}
+async function openOpView(key){
+  const o=findOp(key);if(!o)return;
+  const ty=TYPES[o.type];const [t]=opTitle(o);
+  const who=[o.by,o.editedBy].filter(Boolean);
+  if(user&&who.length){try{const ps=await user.profiles(who);for(const id of who)names[id]=ps[id]&&ps[id].name||'';}catch(e){}}
+  const rows=[['Тип',ty.label],['Дата',dayLabel(o.date)]];
+  if(o.payVia==='client')rows.push(['Оплата','через клієнта '+clientName(o.client)]);
+  else if(o.client)rows.push(['Клієнт',clientName(o.client)]);
+  if(o.from&&o.payVia!=='client')rows.push(['З каси',boxName(o.from)]);
+  if(o.to&&o.payVia!=='client')rows.push(['В касу',boxName(o.to)]);
+  if(o.type==='exchange')rows.push(['Віддали',fmt(o.amount,o.cur)],['Отримали',fmt(o.amount2,o.cur2)],['Курс',fmtRate(o.rate)]);
+  else rows.push(['Сума',fmt(o.amount,o.cur)]);
+  if(o.isAsset)rows.push(['Основний засіб',o.assetName||'без назви']);
+  else if(o.category)rows.push(['Вид',o.category]);
+  if(o.comment)rows.push(['Коментар',o.comment]);
+  rows.push(['Записав',(names[o.by]||'—')+(o.ts?' · '+when(o.ts):'')]);
+  if(o.editedBy)rows.push(['Змінив',(names[o.editedBy]||'—')+(o.editedTs?' · '+when(o.editedTs):'')]);
+  const hist=audit.filter(e=>e.opId===o.id).sort((a,b)=>a.ts-b.ts);
+  if(user){const ids=hist.map(e=>e.by).filter(i=>i&&!(i in names));if(ids.length){try{const ps=await user.profiles(ids);for(const i of ids)names[i]=ps[i]&&ps[i].name||'';}catch(e){}}}
+  openSheet(esc(t),`<dl class="kv">${rows.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+  ${hist.length?`<h2 style="margin-top:4px">Історія операції</h2><div class="ops" style="margin-bottom:14px">${hist.map(e=>entryHtml(e,false)).join('')}</div>`:''}
+  ${canWrite&&canEditOp(o)?`<div class="row-actions" id="op-actions"><button class="btn" type="button" data-act="opedit" data-v="${esc(key)}">Редагувати</button><button class="btn danger" type="button" data-act="opdel" data-v="${esc(key)}">Видалити</button></div>`:''}`);
+}
+
+/* ---------- form ---------- */
+function activeBoxes(keep){return C().boxes.filter(b=>!b.archived||b.id===keep);}
+function boxesFor(keep){const all=activeBoxes(keep);if(!isCashier()||(form&&form.kind==='transfer'))return all;return all.filter(b=>b.id===myBox());}
+function newForm(type){
+  const last=ls('kasa.lastBox')||'';const boxes=activeBoxes();
+  const def=isCashier()?myBox():boxes.find(b=>b.id===last)?last:(boxes[0]?boxes[0].id:'');
+  return {kind:type||'out',target:'',cat:'',payVia:'box',date:today(),from:def,to:def,client:'',newClient:'',cur:BASE,cur2:'USD',amount:'',amount2:'',rate:'',assetName:'',comment:''};
+}
+const FORM_KINDS=[['out','−','out','видаток'],['in','+','in','прихід'],['transfer','⇄','move','переказ'],['exchange','$⇄₴','fx','обмін']];
+/* What the form means in ledger terms */
+function resolved(){
+  const s=form;
+  if(s.kind==='transfer'||s.kind==='exchange')return {type:s.kind};
+  const t=s.target||'';
+  if(t.startsWith('cli:'))return {type:s.kind==='out'?'clientOut':'clientIn'};
+  if(t==='exp')return s.cat==='__oz'?{type:'expense',isAsset:true}:{type:'expense',category:s.cat||null};
+  if(t==='inc')return {type:'income',category:s.cat||null};
+  return {type:null};
+}
+function fld(label,inner){return `<label class="fld"><span>${label}</span>${inner}</label>`;}
+function formHtml(){
+  const s=form,c=C(),r=resolved();
+  const boxSel=(k,l)=>fld(l,`<select id="f-${k}" data-f="${k}">${opt('','— оберіть —',s[k])}${boxesFor(s[k]).map(b=>opt(b.id,b.name,s[k])).join('')}</select><span class="hint" id="h-${k}"></span>`);
+  const curSel=(k,l)=>fld(l,`<select id="f-${k}" data-f="${k}">${c.currencies.map(x=>opt(x,x+(SYM[x]?' '+SYM[x]:''),s[k])).join('')}</select>`);
+  const amt=(k,l,ph)=>fld(l,`<input id="f-${k}" data-f="${k}" inputmode="decimal" autocomplete="off" value="${esc(s[k])}" placeholder="${ph||'0'}">`);
+  const money=`<div class="two">${curSel('cur','Валюта')}${amt('amount','Сума')}</div>`;
+  const out=s.kind==='out';
+  let h=`<div class="seg kinds">${FORM_KINDS.map(([k,sg,cls,cap])=>`<button type="button" class="seg-b t-${cls}${s.kind===k?' on':''}" data-act="ftype" data-v="${k}" aria-label="${cap}"><span class="sg">${sg}</span><span class="cap">${cap}</span></button>`).join('')}</div>`;
+  h+=fld('Дата',`<input id="f-date" type="date" data-f="date" value="${esc(s.date)}">`);
+  if(s.kind==='out'||s.kind==='in'){
+    const curCli=s.target.startsWith('cli:')?s.target.slice(4):null;
+    h+=fld(out?'Кому':'Від кого',`<select id="f-target" data-f="target" data-redraw="1">${opt('','— оберіть —',s.target)}${out?opt('exp','ВИТРАТИ',s.target):opt('inc','ДОХІД',s.target)}${isCashier()?'':`<optgroup label="Клієнти">${clientList(curCli).map(x=>opt('cli:'+x.id,x.name,s.target)).join('')}${opt('cli:__new','+ Новий клієнт',s.target)}</optgroup>`}</select>`);
+    if(curCli){
+      h+=`<span class="hint" id="h-client" style="display:block;margin:-6px 0 10px"></span>`;
+      if(s.client==='__new')h+=fld("Ім'я нового клієнта",`<input id="f-newClient" data-f="newClient" value="${esc(s.newClient)}" placeholder="Напр. Петро">`);
+    }
+    if(s.target==='exp'||s.target==='inc'){
+      const cats=(out?c.categories:c.incomeCategories).slice();
+      if(s.cat&&s.cat!=='__oz'&&!cats.includes(s.cat))cats.push(s.cat);
+      h+=fld(out?'Вид витрати':'Вид доходу',`<select id="f-cat" data-f="cat" data-redraw="1">${opt('','— оберіть —',s.cat)}${cats.map(x=>opt(x,x,s.cat)).join('')}${out?opt('__oz','Основний засіб (інструмент, обладнання)',s.cat):''}</select>`);
+      if(r.isAsset)h+=fld('Назва основного засобу',`<input id="f-assetName" data-f="assetName" value="${esc(s.assetName)}" placeholder="Напр. Болгарка Makita">`);
+    }
+    h+=out?boxSel('from','З каси'):boxSel('to','В касу');
+    h+=money;
+  }else if(s.kind==='transfer'){
+    h+=boxSel('from','З каси')+boxSel('to','В касу')+money;
+  }else{
+    h+=boxSel('from','З каси')+`<div class="two">${curSel('cur','Віддаю валюту')}${amt('amount','Сума')}</div>`;
+    h+=`<div class="two">${curSel('cur2','Отримую валюту')}${amt('rate','Курс','напр. 41,5')}</div>`;
+    h+=amt('amount2','Отримано (рахується з курсу, можна змінити)');
+    h+=boxSel('to','Кладу в касу')+`<div class="calc" id="fx-calc"></div>`;
+  }
+  h+=fld('Коментар',`<textarea id="f-comment" data-f="comment" rows="2" placeholder="Що саме, у кого, для чого">${esc(s.comment)}</textarea>`);
+  h+=`<div class="err" id="f-err"></div><button class="btn primary" type="button" data-act="fsave" id="f-save">Зберегти</button>`;
+  return h;
+}
+function openForm(st){form=st;openSheet(st.id?'Редагувати операцію':'Нова операція',`<div id="form-body">${formHtml()}</div>`);updateHints();}
+function redrawForm(){const fb=document.getElementById('form-body');if(fb){fb.innerHTML=formHtml();updateHints();}}
+function fxCalc(){const a=num(form.amount),r=num(form.rate);if(!(a>0&&r>0))return null;return form.cur===BASE&&form.cur2!==BASE?r2(a/r):r2(a*r);}
+function fxRate(){const a=num(form.amount),b=num(form.amount2);if(!(a>0&&b>0))return null;const r=form.cur===BASE&&form.cur2!==BASE?a/b:b/a;return Math.round(r*10000)/10000;}
+function updateHints(){
+  if(!form)return;
+  const all=allOps();const bal=boxBalances(all,null,form.id);
+  const rt=resolved();const usesFrom=rt.type==='transfer'||rt.type==='exchange'||rt.type==='clientOut'||(rt.type==='expense'&&!rt.viaClient);
+  const hf=document.getElementById('h-from');
+  if(hf&&usesFrom&&isCashier()&&form.from!==myBox()){hf.textContent='';}
+  else if(hf&&usesFrom){const have=form.from?((bal[form.from]||{})[form.cur]||0):null;const a=num(form.amount);
+    if(have===null){hf.textContent='';}else{hf.textContent='У касі зараз: '+fmt(have,form.cur)+(a>have?' — не вистачає '+fmt(a-have,form.cur):'');hf.className='hint'+(a>have?' warn':'');}}
+  const ht=document.getElementById('h-to');
+  if(ht){const cur=form.kind==='exchange'?form.cur2:form.cur;ht.textContent=form.to&&(!isCashier()||form.to===myBox())?'У касі зараз: '+fmt((bal[form.to]||{})[cur]||0,cur):'';}
+  const hc=document.getElementById('h-client');
+  if(hc){const cb=clientBalances(all.filter(o=>o.id!==form.id))[form.client]||{};const ks=sortCurs(Object.keys(cb).filter(k=>Math.abs(cb[k])>=0.005));hc.textContent=form.client&&form.client!=='__new'?(ks.length?'Зараз: '+ks.map(k=>(cb[k]>0?'винен мені ':'я винен ')+fmt(Math.abs(cb[k]),k)).join(', '):'Зараз: розраховані'):'';}
+  const fc=document.getElementById('fx-calc');
+  if(fc&&form.kind==='exchange'){const a=num(form.amount),b=num(form.amount2);fc.textContent=a>0&&b>0?`Віддаю ${fmt(a,form.cur)} → отримую ${fmt(b,form.cur2)}`:'Вкажіть суму і курс';}
+}
+function validate(){
+  const s=form,a=r2(num(s.amount)),r=resolved(),t=r.type;
+  if(!s.date)return 'Вкажіть дату.';
+  if(!t)return s.kind==='out'?'Оберіть, кому пішли гроші.':'Оберіть, від кого прийшли гроші.';
+  if((t==='expense'&&!r.isAsset&&!r.category)||(t==='income'&&!r.category))return 'Оберіть вид.';
+  if(!(a>0))return 'Вкажіть суму більше нуля.';
+  const viaClient=!!r.viaClient;
+  const needClient=viaClient||t==='clientIn'||t==='clientOut';
+  const needFrom=!viaClient&&['expense','transfer','exchange','clientOut'].includes(t);
+  const needTo=!viaClient&&['income','transfer','exchange','clientIn'].includes(t);
+  if(needClient&&!s.client)return 'Оберіть клієнта.';
+  if(needClient&&s.client==='__new'&&!s.newClient.trim())return "Вкажіть ім'я нового клієнта.";
+  if(needFrom&&!s.from)return 'Оберіть касу, з якої йдуть гроші.';
+  if(needTo&&!s.to)return 'Оберіть касу, куди йдуть гроші.';
+  if(t==='transfer'&&s.from===s.to)return 'Каси мають бути різні.';
+  if(isCashier()){const mb=myBox();if(t==='transfer'&&s.from!==mb&&s.to!==mb)return 'Переказ можливий тільки з вашої каси або у вашу касу.';if(t!=='transfer'&&((s.from&&s.from!==mb&&needFrom)||(s.to&&s.to!==mb&&needTo)))return 'Можна працювати тільки зі своєю касою.';if(t==='clientIn'||t==='clientOut')return 'Операції з клієнтами вам недоступні.';}
+  if(t==='exchange'){if(s.cur===s.cur2)return 'Оберіть різні валюти для обміну.';if(!(r2(num(s.amount2))>0))return 'Вкажіть, скільки отримали після обміну.';}
+  if(r.isAsset&&!s.assetName.trim())return 'Вкажіть назву основного засобу.';
+  return '';
+}
+function buildOp(prev,clientId){
+  const s=form,r=resolved(),t=r.type;const viaClient=!!r.viaClient;
+  const op={type:t,date:s.date,payVia:(t==='expense'||t==='income')?(viaClient?'client':'box'):null,from:null,to:null,client:null,cur:s.cur,amount:r2(num(s.amount)),cur2:null,amount2:null,rate:null,category:null,isAsset:false,assetName:null,comment:(s.comment||'').trim(),deleted:false,
+    by:prev?prev.by||null:me.id,ts:prev?prev.ts||Date.now():Date.now(),editedBy:prev?me.id:null,editedTs:prev?Date.now():null};
+  if(!viaClient&&['expense','transfer','exchange','clientOut'].includes(t))op.from=s.from;
+  if(!viaClient&&['income','transfer','exchange','clientIn'].includes(t))op.to=s.to;
+  if(viaClient||t==='clientIn'||t==='clientOut')op.client=clientId;
+  if(t==='exchange'){op.cur2=s.cur2;op.amount2=r2(num(s.amount2));op.rate=fxRate();}
+  if(r.isAsset){op.isAsset=true;op.assetName=s.assetName.trim();op.category='Основні засоби';}
+  else if(t==='expense'||t==='income')op.category=r.category;
+  return op;
+}
+async function ensureClient(name){
+  const n=name.trim();const hit=Object.keys(clients).find(id=>String(clients[id].name).trim().toLowerCase()===n.toLowerCase());
+  if(hit)return hit;
+  const id='c'+uid();await db.doc('clients/'+id).set({name:n,archived:false,by:me.id,ts:Date.now()});
+  return id;
+}
+async function putOp(day,id,op){
+  await db.doc('days/'+day).update({ops:{[id]:op}});
+}
+async function saveForm(){
+  const err=validate();const ee=document.getElementById('f-err');
+  if(err){ee.textContent=err;return;}
+  const btn=document.getElementById('f-save');btn.disabled=true;btn.textContent='Зберігаю…';ee.textContent='';
+  try{
+    const prev=form.id?findOp(form.origDay+'|'+form.id):null;
+    let clientId=form.client;
+    const rt=resolved();const needClient=!!rt.viaClient||rt.type==='clientIn'||rt.type==='clientOut';
+    if(needClient&&clientId==='__new')clientId=await ensureClient(form.newClient);
+    const id=form.id||uid();const op=buildOp(prev,needClient?clientId:null);
+    if(prev&&prev.day!==op.date){await db.doc('days/'+prev.day).update({ops:{[id]:{deleted:true,deletedBy:me.id,deletedTs:Date.now()}}});}
+    await putOp(op.date,id,op);
+    if(op.from)ls('kasa.lastBox',op.from);else if(op.to)ls('kasa.lastBox',op.to);
+    let logged=true;try{await logAudit(prev?'edit':'create',id,cleanOp(prev),op);}catch(err){logged=false;}
+    closeSheet();toast(!navigator.onLine?'Записано на телефоні. Надішлеться, коли з\u2019явиться інтернет':logged?(prev?'Зміни збережено':'Операцію записано'):'Збережено, але історію не записано');
+  }catch(e){
+    btn.disabled=false;btn.textContent='Зберегти';
+    ee.textContent=e&&e.code==='invalid_argument'?'Немає права записувати. Попросіть власника дати вам права редагування.':e&&e.code==='quota_exceeded'?'Сховище заповнене. Напишіть власнику сторінки.':'Не вдалося зберегти. Перевірте інтернет і спробуйте ще раз.';
+  }
+}
+
+/* ---------- sheet ---------- */
+function openSheet(title,body){
+  document.getElementById('sheet-root').innerHTML=`<div class="overlay" data-act="ovl"><div class="sheet" role="dialog" aria-modal="true" aria-label="${title}"><div class="sheet-h"><h3>${title}</h3><button class="x" type="button" data-act="close" aria-label="Закрити">×</button></div>${body}</div></div>`;
+}
+function closeSheet(){document.getElementById('sheet-root').innerHTML='';form=null;}
+
+/* ---------- settings save ---------- */
+let cfgTimer=null;
+function saveCfg(next,now){
+  cfg=next;clearTimeout(cfgTimer);
+  const go=async()=>{try{await db.doc('config/main').set(cfg);}catch(e){toast('Не вдалося зберегти налаштування');}};
+  if(now)go();else cfgTimer=setTimeout(go,700);
+}
+function cloneCfg(){return JSON.parse(JSON.stringify(C()));}
+const clientTimers={};
+function renameClient(id,name){clearTimeout(clientTimers[id]);clientTimers[id]=setTimeout(async()=>{if(!name.trim())return;try{await db.doc('clients/'+id).update({name:name.trim()});}catch(e){toast('Не вдалося перейменувати');}},700);}
+async function addClient(inputId){const inp=document.getElementById(inputId);const n=inp.value.trim();if(!n)return;try{await ensureClient(n);inp.value='';toast('Клієнта додано');}catch(e){toast('Не вдалося додати клієнта');}}
+
+/* ---------- CSV ---------- */
+async function exportCsv(){
+  const ops=filteredOps(allOps());
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';const n=v=>v==null?'':String(v).replace('.',',');
+  const lines=[['Дата','Тип','Оплата','З каси','В касу','Клієнт','Валюта','Сума','Валюта отримано','Сума отримано','Курс','Вид','ОЗ','Коментар'].map(q).join(';')];
+  for(const o of ops)lines.push([o.date,TYPES[o.type].label,o.payVia==='client'?'через клієнта':o.payVia==='box'?'каса':'',o.from?boxName(o.from):'',o.to?boxName(o.to):'',o.client?clientName(o.client):'',o.cur,n(o.amount),o.cur2||'',n(o.amount2),n(o.rate),o.category||'',o.isAsset?o.assetName:'',o.comment||''].map(q).join(';'));
+  try{await downloads.save({filename:'kasa-sto-'+today()+'.csv',data:'﻿'+lines.join('\r\n')});}catch(e){if(e&&e.code!=='declined')toast('Не вдалося завантажити файл');}
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',async e=>{
+  const el=e.target.closest('[data-act]');if(!el)return;
+  const act=el.dataset.act,v=el.dataset.v;
+  if(act==='ovl'&&e.target!==el)return;
+  switch(act){
+    case 'new':if(!C().boxes.length){toast('Спершу додайте каси');return;}openForm(newForm());break;
+    case 'close':case 'ovl':closeSheet();break;
+    case 'ftype':form.kind=v;form.target='';form.cat='';form.payVia='box';if(isCashier()&&v!=='transfer'){form.from=myBox();form.to=myBox();}if(v==='exchange'){if(form.cur===form.cur2)form.cur2=form.cur===BASE?'USD':BASE;if(!form.to)form.to=form.from;}redrawForm();break;
+    case 'fpay':form.payVia=v;redrawForm();break;
+    case 'fsave':saveForm();break;
+    case 'boxjournal':ui.f={from:'',to:'',box:v,client:'',type:'',cat:'',q:''};location.hash='#zhurnal';break;
+    case 'clientjournal':ui.f={from:'',to:'',box:'',client:v,type:'',cat:'',q:''};location.hash='#zhurnal';break;
+    case 'goclients':location.hash='#kliienty';break;
+    case 'go':location.hash='#'+v;break;
+    case 'jreset':ui.f={from:'',to:'',box:'',client:'',type:'',cat:'',q:''};render(true);break;
+    case 'csv':exportCsv();break;
+    case 'eod':ui.openEod.has(v)?ui.openEod.delete(v):ui.openEod.add(v);render();break;
+    case 'moredays':ui.dayLimit+=30;render();break;
+    case 'rp':ui.rep={month:v==='month'?thisMonth():''};render(true);break;
+    case 'opview':openOpView(v);break;
+    case 'opedit':{const o=findOp(v);if(!o)return;const kind=o.type==='expense'||o.type==='clientOut'?'out':o.type==='income'||o.type==='clientIn'?'in':o.type;const target=o.type==='clientOut'||o.type==='clientIn'?'cli:'+o.client:o.type==='expense'?'exp':o.type==='income'?'inc':'';const cat=o.isAsset?'__oz':(o.category||'');openForm({id:o.id,origDay:o.day,kind,target,cat,payVia:o.payVia||'box',date:o.date,from:o.from||'',to:o.to||'',client:o.client||'',newClient:'',cur:o.cur,cur2:o.cur2||'USD',amount:String(o.amount),amount2:o.amount2!=null?String(o.amount2):'',rate:o.rate!=null?String(o.rate):'',assetName:o.assetName||'',comment:o.comment||''});break;}
+    case 'opdel':{const box=document.getElementById('op-actions');box.innerHTML=`<span class="small" style="align-self:center">Видалити операцію назавжди?</span><button class="btn danger solid" type="button" data-act="opdel2" data-v="${esc(v)}">Так, видалити</button><button class="btn" type="button" data-act="close">Ні</button>`;break;}
+    case 'opdel2':{const [d,id]=v.split('|');const before=cleanOp(findOp(v));el.disabled=true;try{await db.doc('days/'+d).update({ops:{[id]:{deleted:true,deletedBy:me.id,deletedTs:Date.now()}}});let logged=true;try{await logAudit('delete',id,before,null);}catch(e2){logged=false;}closeSheet();toast(logged?'Операцію видалено':'Видалено, але історію не записано');}catch(err){el.disabled=false;toast('Не вдалося видалити');}break;}
+    case 'disp':ui.disp=v;try{localStorage.setItem('kasa.disp',v);}catch(e){}render();break;
+    case 'login':doLogin();break;
+    case 'logout':signOut(FB.auth).then(()=>location.reload());break;
+    case 'migrate':{const f=document.getElementById('mig-file');if(!f||!f.files||!f.files[0]){const st=document.getElementById('mig-status');if(st)st.textContent='Спочатку оберіть файл.';return;}el.disabled=true;await importData(f.files[0]);el.disabled=false;break;}
+    case 'claimempty':el.disabled=true;await claimEmpty();break;
+    case 'goaudit':location.hash='#zminy';break;
+    case 'aufilter':ui.audit.all=v==='all';render(true);break;
+    case 'aumore':ui.audit.limit+=150;render();break;
+    case 'auseen':{auditSeen=Date.now();render(true);if(me.id){try{await db.doc('data/users/'+me.id+'/prefs').set({auditSeen});toast('Позначено переглянутим');}catch(e3){toast('Не вдалося зберегти');}}break;}
+    case 'addbox':{const n=document.getElementById('nb-name').value.trim();if(!n)return;const c=cloneCfg();c.boxes.push({id:'b'+uid(),name:n,archived:false});saveCfg(c,true);render(true);break;}
+    case 'sbarch':{const c=cloneCfg();const b=c.boxes[+el.dataset.i];
+      if(!b.archived){const bb=boxBalances(allOps())[b.id]||{};if(Object.keys(bb).some(k=>bb[k]!==0)){toast('У касі ще є гроші — спершу перекажіть їх');return;}}
+      b.archived=!b.archived;saveCfg(c,true);render(true);break;}
+    case 'addclient':addClient('nc-name');break;
+    case 'addclient2':addClient('nc-name2');break;
+    case 'carch':{const cl=clients[v];if(!cl)return;
+      if(!cl.archived){const cb=clientBalances(allOps())[v]||{};if(Object.keys(cb).some(k=>Math.abs(cb[k])>=0.005)){toast('Спершу розрахуйтесь з клієнтом');return;}}
+      try{await db.doc('clients/'+v).update({archived:!cl.archived});}catch(err){toast('Не вдалося змінити');}break;}
+    case 'addchip':{const k=el.dataset.k;const inp=document.getElementById('add-'+k);let val=inp.value.trim();if(k==='currencies')val=val.toUpperCase().slice(0,5);if(!val)return;const c=cloneCfg();if(!c[k].includes(val))c[k].push(val);saveCfg(c,true);render(true);break;}
+    case 'mvchip':case 'mvbox':{const c=cloneCfg();const arr=act==='mvbox'?c.boxes:c[el.dataset.k];const i=+el.dataset.i,j=i+(+el.dataset.d);if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];saveCfg(c,true);render(true);break;}
+    case 'rmchip':{const k=el.dataset.k;const c=cloneCfg();if(k==='currencies'&&c.currencies[+el.dataset.i]===BASE){toast('Гривню прибрати не можна');return;}c[k].splice(+el.dataset.i,1);saveCfg(c,true);render(true);break;}
+  }
+});
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.dataset.f&&form){
+    const k=t.dataset.f;form[k]=t.type==='checkbox'?t.checked:t.value;
+    if(k==='target'){form.cat='';if(form.target.startsWith('cli:'))form.client=form.target.slice(4);}
+    if(t.dataset.redraw){redrawForm();return;}
+    if(form.kind==='exchange'&&(k==='amount'||k==='rate'||k==='cur'||k==='cur2')){const b=fxCalc();if(b!=null){form.amount2=String(b);const i=document.getElementById('f-amount2');if(i)i.value=String(b).replace('.',',');}}
+    if(form.kind==='exchange'&&k==='amount2'){const r=fxRate();if(r!=null){form.rate=String(r);const i=document.getElementById('f-rate');if(i)i.value=String(r).replace('.',',');}}
+    updateHints();return;
+  }
+  if(t.dataset.jf){ui.f[t.dataset.jf]=t.value;ui.dayLimit=30;render();return;}
+  if(t.dataset.eod){ui.eodDate=t.value;render();return;}
+  if(t.dataset.rf){ui.rep[t.dataset.rf]=t.value;render(true);return;}
+  if(t.dataset.sb&&canAdmin){const c=cloneCfg();c.boxes[+t.dataset.i][t.dataset.sb]=t.value;saveCfg(c);return;}
+  if(t.dataset.rate&&canAdmin){const c=cloneCfg();c.rates=c.rates||{};const r=num(t.value);if(r>0)c.rates[t.dataset.rate]=r;else delete c.rates[t.dataset.rate];saveCfg(c);return;}
+  if(t.dataset.sc&&canWrite){renameClient(t.dataset.sc,t.value);return;}
+  if(t.dataset.roleuid&&isOwner){saveRole(t.dataset.roleuid,{role:t.value});return;}
+  if(t.dataset.roleboxuid&&isOwner){saveRole(t.dataset.roleboxuid,{box:t.value});return;}
+});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.f&&form&&!t.dataset.redraw){form[t.dataset.f]=t.type==='checkbox'?t.checked:t.value;updateHints();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('sheet-root').innerHTML)closeSheet();});
+window.addEventListener('hashchange',()=>{setTabFromHash();render(true);window.scrollTo(0,0);});
+
+/* ---------- names ---------- */
+async function resolveNames(){
+  if(!user)return;
+  const ids=new Set();for(const o of allOps()){if(o.by)ids.add(o.by);}for(const e of audit)if(e.by)ids.add(e.by);
+  const miss=[...ids].filter(i=>!(i in names));if(!miss.length)return;
+  try{const ps=await user.profiles(miss);for(const i of miss)names[i]=ps[i]&&ps[i].name||'';}catch(e){}
+  if((ui.tab==='zminy'||ui.tab==='zhurnal')&&!isTyping())render();
+}
+
+/* ---------- boot ---------- */
+function isTyping(){const a=document.activeElement;return a&&a.dataset&&(a.dataset.sb||a.dataset.sc||a.dataset.rate);}
+let dataStarted=false,pendingDays=0,isOnline=navigator.onLine;
+function setNet(){
+  const el=document.getElementById('net');if(!el)return;
+  if(!isOnline){el.hidden=false;el.className='net off';el.textContent='Немає інтернету. Записи зберігаються на телефоні й надішлються самі, коли з’явиться зв’язок.';}
+  else if(pendingDays){el.hidden=false;el.className='net sync';el.textContent='Надсилаю записи…';}
+  else el.hidden=true;
+}
+window.addEventListener('online',()=>{isOnline=true;setNet();});
+window.addEventListener('offline',()=>{isOnline=false;setNet();});
+window.addEventListener('fb-write-error',e=>{const c=e.detail&&e.detail.code||'';toast(c.includes('permission')?'Немає прав на цю дію':'Не вдалося зберегти: '+c);});
+downloads={save:async({filename,data})=>{const b=new Blob([data],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=filename;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);}};
+user={profiles:async ids=>{const r={};for(const i of ids){const m=members[i];r[i]={name:(m&&m.name)||(cfg&&cfg.legacyNames&&cfg.legacyNames[i])||''};}return r;}};
+
+function startData(){
+  if(dataStarted)return;dataStarted=true;
+  const fail=e=>{console.warn(e);noDb=true;render(true);};
+  db.collection('members').onSnapshot(s=>{const n={};s.docs.forEach(d=>{n[d.id]=d.data()||{};});members=n;for(const k in n)names[k]=n[k].name||names[k]||'';resolveNames();if(ui.tab==='nalashtuvannia'&&!isTyping())render(true);},()=>{});
+  db.doc('config/main').onSnapshot(s=>{
+    const d=s.exists?s.data():null;
+    cfg=d?Object.assign({},DEFAULT_CFG,d):null;
+    if(cfg){for(const k of ['boxes','categories','incomeCategories','currencies'])if(!Array.isArray(cfg[k]))cfg[k]=DEFAULT_CFG[k].slice();if(!cfg.rates||typeof cfg.rates!=='object')cfg.rates={};}
+    cfgLoaded=true;resolveNames();if(isTyping()){const dyn=document.getElementById('dyn');if(dyn&&ui.tab!=='nalashtuvannia')render();}else render(true);if(form)updateHints();
+  },fail);
+  db.collection('clients').onSnapshot(s=>{
+    const n={};s.docs.forEach(d=>{const x=d.data();if(x)n[d.id]={name:x.name||'',archived:!!x.archived};});clients=n;
+    clientsLoaded=true;if(!isTyping())render(ui.tab==='zhurnal');if(form)updateHints();
+  },fail);
+  db.collection('days').onSnapshot(s=>{
+    const n={};let p=0;s.docs.forEach(d=>{const x=d.data();n[d.id]=x&&x.ops||{};if(d.pending)p++;});days=n;pendingDays=p;setNet();
+    daysLoaded=true;if(!isTyping())render();if(form)updateHints();
+    resolveNames();
+  },fail,true);
+  db.doc('data/users/'+me.id+'/prefs').get().then(p=>{auditSeen=p.exists&&+(p.data()||{}).auditSeen||0;if(!isTyping())render();}).catch(()=>{});
+  db.collection('audit').onSnapshot(s=>{
+    if(!s.docs.length)onAudit();
+    s.docs.forEach(d=>{const u=d.id;if(auditSubs[u])return;
+      auditSubs[u]=db.collection('audit/'+u+'/months').onSnapshot(ms=>{
+        const list=[];ms.docs.forEach(m=>{const x=m.data();const e=x&&x.e||{};for(const k in e)if(e[k]&&e[k].action)list.push(Object.assign({id:k},e[k]));});
+        auditBy[u]=list;audit=[].concat(...Object.values(auditBy));onAudit();
+      },()=>{});});
+  },()=>{auditLoaded=true;});
+}
+
+/* ---------- first run: become owner, import data ---------- */
+async function claimOwner(){await setDoc(fdoc(FB.fs,'meta/owner'),{uid:me.id,email:me.email||'',ts:Date.now()});}
+async function importData(file){
+  const st=document.getElementById('mig-status');const say=t=>{if(st)st.textContent=t;};
+  if(!navigator.onLine){say('Для перенесення потрібен інтернет.');return;}
+  let data;try{data=JSON.parse(await file.text());}catch(e){say('Файл не схожий на файл перенесення.');return;}
+  if(!data||data.format!=='baza-service-migration'){say('Це не той файл. Потрібен файл, який надіслав Claude.');return;}
+  say('Стаю власником…');
+  try{await claimOwner();}catch(e){say('Не вдалося стати власником: '+(e.code||e.message));return;}
+  const writes=[];
+  const cfgOut=Object.assign({},data.config||{});if(data.legacyNames)cfgOut.legacyNames=data.legacyNames;
+  writes.push(['config/main',cfgOut]);
+  writes.push(['roles/main',{users:{}}]);
+  writes.push(['data/users/'+me.id+'/prefs',{auditSeen:Date.now()}]);
+  for(const id in (data.clients||{}))writes.push(['clients/'+id,data.clients[id]]);
+  for(const d in (data.days||{}))writes.push(['days/'+d,{ops:data.days[d]}]);
+  const byDay={};let lastTs=0;
+  for(const e of (data.audit||[])){const dt=new Date(e.ts);const k=dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate());const {id:eid,...rest}=e;(byDay[k]=byDay[k]||{})[eid]=rest;if(e.ts>lastTs)lastTs=e.ts;}
+  for(const k in byDay)writes.push(['audit/legacy/months/'+k,{e:byDay[k]}]);
+  if(Object.keys(byDay).length)writes.push(['audit/legacy',{last:lastTs}]);
+  say('Переношу дані: 0 з '+writes.length+'…');
+  try{
+    for(let i=0;i<writes.length;i+=400){const b=writeBatch(FB.fs);for(const [p,v] of writes.slice(i,i+400))b.set(fdoc(FB.fs,p),v);await b.commit();say('Переношу дані: '+Math.min(i+400,writes.length)+' з '+writes.length+'…');}
+  }catch(e){say('Помилка під час перенесення: '+(e.code||e.message)+'. Напишіть Claude.');return;}
+  say('Готово! Дані перенесено.');
+}
+async function claimEmpty(){
+  try{await claimOwner();await setDoc(fdoc(FB.fs,'config/main'),{boxes:[],categories:['Інше'],incomeCategories:['Інший дохід'],currencies:['UAH','USD'],rates:{}});await setDoc(fdoc(FB.fs,'roles/main'),{users:{}});}
+  catch(e){toast('Помилка: '+(e.code||e.message));}
+}
+
+async function doLogin(){
+  const p=new GoogleAuthProvider();p.setCustomParameters({prompt:'select_account'});
+  try{await signInWithPopup(FB.auth,p);}
+  catch(e){
+    const c=e&&e.code||'';
+    if(c.includes('popup-closed')||c.includes('cancelled'))return;
+    if(c.includes('popup-blocked')||c.includes('operation-not-supported')||c.includes('web-storage')){try{await signInWithRedirect(FB.auth,p);}catch(e2){toast('Помилка входу: '+(e2.code||''));}}
+    else toast('Помилка входу: '+c);
+  }
+}
+
+setTabFromHash();render(true);
+getRedirectResult(FB.auth).catch(()=>{});
+onAuthStateChanged(FB.auth,u=>{
+  if(!u){authState='out';render(true);return;}
+  if(authState==='in')return;
+  authState='in';
+  me={id:u.uid,name:u.displayName||u.email||'',email:u.email||''};
+  db=fbdb;
+  document.getElementById('who').textContent=me.name;
+  document.getElementById('logout').hidden=false;
+  names[me.id]=me.name;
+  db.doc('members/'+me.id).set({seen:Date.now(),name:me.name,email:me.email});
+  db.doc('meta/owner').onSnapshot(s=>{
+    ownerUid=s.exists?(s.data()||{}).uid:null;ownerLoaded=true;
+    isOwner=ownerUid===me.id;canAdmin=isOwner;
+    if(ownerUid&&!rolesSub){
+      rolesSub=db.doc('roles/main').onSnapshot(r=>{const d=r.exists?r.data():null;roles=d&&d.users||{};rolesLoaded=true;
+        const ro=myRole();canWrite=ro!=='viewer'&&ro!=='none';
+        if(ro!=='none')startData();
+        if(!isTyping())render(true);if(isOwner)resolveMemberNames();},()=>{rolesLoaded=true;render(true);});
+    }
+    render(true);
+  },e=>{console.warn(e);ownerLoaded=true;render(true);});
+});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+setNet();
+})();
+</script>
+</body>
+</html>
