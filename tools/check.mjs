@@ -11,11 +11,11 @@ const month = '2026-11';
 const E = etalonData(month);
 const run = new Function('E', m[1] + `
   cfg = E.config; clients = E.clients; days = E.days;
-  return { M: model(), currentRate };`);
-const { M, currentRate } = run(E);
+  return { M: model(), currentRate, osv };`);
+const { M, currentRate, osv } = run(E);
 let bad = 0;
 for (const x of EXPECTED) {
-  const a = actualValue(M, { currentRate, month }, x.key);
+  const a = actualValue(M, { currentRate, osv, month }, x.key);
   const ok = a != null && Math.abs(a - x.value) < 0.005;
   if (!ok) bad++;
   console.log((ok ? '✅ ' : '❌ ') + x.label + ': очікується ' + x.value + ', є ' + a);

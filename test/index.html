@@ -95,6 +95,14 @@ tr:last-child td{border-bottom:0}
 tr.total td{font-weight:800;background:var(--surface-2)}
 tr.sec td{font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:var(--surface-2)}
 td.ind{padding-left:22px}
+tr.click{cursor:pointer}tr.click:active td{background:var(--surface-2)}
+td .an{display:block;font-size:12px;color:var(--muted);font-weight:400}
+td.code{font-weight:800}
+.acl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:8px;align-items:center;margin:6px 0}.acl span{font-size:14px;overflow-wrap:anywhere}.acl select{width:100%;min-width:0}.acc-sub{display:block;margin:14px 0 4px}
+table.osv{font-size:13px}table.osv th,table.osv td{padding:8px 6px}table.osv th:first-child,table.osv td:first-child{padding-left:10px}table.osv th:last-child,table.osv td:last-child{padding-right:10px}
+.crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0 10px;font-size:14px}
+.crumbs button{background:none;border:0;color:var(--accent,inherit);text-decoration:underline;padding:4px 0;font:inherit;cursor:pointer}
+.okline{font-size:13px;margin:8px 2px;color:var(--muted)}
 
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
 .empty-state{background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:18px;color:var(--muted)}
@@ -297,7 +305,7 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 8</div>
+<div class="ver" id="ver">версія 9</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -425,7 +433,96 @@ function model(){
   const months={};let plAll=0;
   for(const o of ops){if(o.type!=='income'&&o.type!=='expense')continue;const v=pl(o);plAll+=v;const m=o.date.slice(0,7);const x=months[m]=months[m]||{inc:0,exp:0,oz:0};if(o.type==='income')x.inc+=v;else if(o.isAsset)x.oz+=-v;else x.exp+=-v;}
   plAll=r2(plAll);
-  return {ops,hist,missing,boxes,cli,cash,cashU:r2(cashU),owedToMe:r2(owedToMe),iOwe:r2(iOwe),owedCur,oweCur,balance,plAll,fxDiff:r2(balance-plAll),months,nowR,opR,pl};
+  const L=ledger(ops,nowR,opR);
+  return {ops,hist,missing,boxes,cli,cash,cashU:r2(cashU),owedToMe:r2(owedToMe),iOwe:r2(iOwe),owedCur,oweCur,balance,plAll,fxDiff:r2(balance-plAll),months,nowR,opR,pl,posts:L.posts};
+}
+
+/* ---------- Управлінський подвійний запис ---------- */
+/* Рахунки: sec a — активи, p — капітал і зобов'язання, i — доходи, e — витрати */
+const ACC={
+  '10':['Основні засоби','a'],'20':['Запаси','a'],'23':['Виробництво (заказ-наряди)','a'],
+  '301':['Каса в гривні','a'],'302':['Каса в валюті','a'],'31':['Рахунки в банках','a'],
+  '36':['Розрахунки з покупцями','a'],'371':['Видані аванси','a'],'372':['Підзвітні особи','a'],'377':['Інші дебітори і кредитори','a'],
+  '40':['Капітал','p'],'44':['Нерозподілений прибуток','p'],'60':['Позики (інвестор)','p'],'63':['Розрахунки з постачальниками','p'],
+  '641':['Розрахунки за податками','p'],'642':['Військовий збір','p'],'651':['ЄСВ','p'],'66':['Розрахунки з оплати праці','p'],
+  '684':['Відсотки до сплати','p'],'685':['Інші кредитори','p'],
+  '702':['Дохід від продажу запчастин','i'],'703':['Дохід від робіт і послуг','i'],'714':['Дохід від курсової різниці','i'],'719':['Інші доходи','i'],
+  '90':['Собівартість','e'],'91':['Загальновиробничі витрати','e'],'92':['Адміністративні витрати','e'],'93':['Витрати на збут','e'],
+  '945':['Втрати від курсової різниці','e'],'949':['Інші витрати','e'],'951':['Відсотки за позиками','e'],'98':['Податки ФОП','e']
+};
+const ACC_ORDER=['10','20','23','301','302','31','36','371','372','377','40','44','60','63','641','642','651','66','684','685','702','703','714','719','90','91','92','93','945','949','951','98'];
+const ACC_SEC={a:'Активи',p:'Капітал і зобов\'язання',i:'Доходи',e:'Витрати'};
+const EXP_ACCS=['91','92','93','949','951','98','90'];
+const INC_ACCS=['703','702','719'];
+const CLIENT_KINDS={other:['Інший','377'],investor:['Інвестор','60'],buyer:['Покупець','36'],supplier:['Постачальник','63'],employee:['Працівник','372'],bank:['Банк','31']};
+const ORGS=[['cash','Готівка'],['tov','ТОВ «БАЗА СЕРВІС»'],['fop3','ФОП 3 група'],['fop2','ФОП 2 група']];
+const OZ_CAT='Основні засоби';
+function acctCfg(){return C().acct||{};}
+function clientKind(id){const k=(acctCfg().clients||{})[id];return CLIENT_KINDS[k]?k:'other';}
+function clientAcc(id){return CLIENT_KINDS[clientKind(id)][1];}
+function expAcc(cat){const m=(acctCfg().exp||{})[cat];return ACC[m]?m:(cat===OZ_CAT||cat==='Інше'?'949':'91');}
+function incAcc(cat){const m=(acctCfg().inc||{})[cat];return ACC[m]?m:'719';}
+function boxOrg(id){const b=C().boxes.find(x=>x.id===id);return b&&b.org||'cash';}
+function cashAcc(cur){return cur===BASE?'301':'302';}
+/* Одна сторона проводки: рахунок, аналітика (an), валюта і сума у валюті */
+function side(acc,an,cur,amt){return {acc,an,cur:cur||BASE,amt:r2(amt)};}
+function ledger(ops,nowR,opR){
+  const posts=[];
+  const add=(o,dt,kt,sum,note)=>{sum=r2(sum);if(!sum)return;posts.push({date:o.date,ts:o.ts||0,opId:o.id||null,day:o.day||null,dt,kt,sum,org:o.payVia==='client'?'cash':boxOrg(o.from||o.to),note:note||''});};
+  const box=(id,cur,a)=>side(cashAcc(cur),'box:'+id,cur,a);
+  const cli=(id,cur,a)=>side(clientAcc(id),'cli:'+id,cur,a);
+  for(const o of ops){
+    const a=+o.amount||0,u=a*opR(o.cur,o.date);
+    const cat=o.type==='expense'&&o.isAsset?OZ_CAT:(o.category||(o.type==='income'?'Інший дохід':'Інше'));
+    const exp=side(expAcc(cat),'cat:'+cat,BASE,u),inc=side(incAcc(cat),'cat:'+cat,BASE,u);
+    switch(o.type){
+      case 'expense':add(o,exp,o.payVia==='client'?cli(o.client,o.cur,a):box(o.from,o.cur,a),u);break;
+      case 'income':add(o,o.payVia==='client'?cli(o.client,o.cur,a):box(o.to,o.cur,a),inc,u);break;
+      case 'clientIn':add(o,box(o.to,o.cur,a),cli(o.client,o.cur,a),u);break;
+      case 'clientOut':add(o,cli(o.client,o.cur,a),box(o.from,o.cur,a),u);break;
+      case 'transfer':add(o,box(o.to,o.cur,a),box(o.from,o.cur,a),u);break;
+      case 'exchange':{
+        const a2=+o.amount2||0,u2=a2*opR(o.cur2,o.date);
+        add(o,box(o.to,o.cur2,a2),box(o.from,o.cur,a),u);
+        const d=r2(u2-u);
+        if(d>0)add(o,box(o.to,o.cur2,0),side('714','',BASE,d),d,'Курсова різниця при обміні');
+        else if(d<0)add(o,side('945','',BASE,-d),box(o.to,o.cur2,0),-d,'Курсова різниця при обміні');
+        break;}
+    }
+  }
+  /* Переоцінка валюти за поточним курсом: різниця йде в 714 (плюс) або 945 (мінус) */
+  const bal={};
+  for(const p of posts)for(const [s,k] of [[p.dt,1],[p.kt,-1]]){if(s.cur===BASE)continue;const key=s.acc+'|'+s.an+'|'+s.cur+'|'+p.org;const x=bal[key]=bal[key]||{s,org:p.org,amt:0,u:0};x.amt+=k*s.amt;x.u+=k*p.sum;}
+  const last=ops.length?ops[ops.length-1].date:'';
+  const t=new Date();const td=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+  const rd=last>td?last:td;
+  for(const key of Object.keys(bal).sort()){
+    const x=bal[key],r=nowR(x.s.cur);if(!r)continue;
+    const d=r2(r2(x.amt)*r-x.u);if(Math.abs(d)<0.005)continue;
+    const o={date:rd,ts:Infinity,payVia:null,from:null,to:null};
+    const s=side(x.s.acc,x.s.an,x.s.cur,0);const note='Переоцінка '+x.s.cur+' за курсом '+(Math.round(r*100)/100);
+    const p=d>0?{dt:s,kt:side('714','',BASE,d)}:{dt:side('945','',BASE,-d),kt:s};
+    posts.push({date:rd,ts:Infinity,opId:null,day:null,dt:p.dt,kt:p.kt,sum:Math.abs(d),org:x.org,note,reval:true});
+  }
+  return {posts};
+}
+/* Оборотно-сальдова відомість. from/to — межі періоду (рядки YYYY-MM-DD, '' — без межі).
+   by: 'acc' — по рахунках, або назва рахунку — по аналітиці цього рахунку.
+   Сальдо: + дебетове, − кредитове. */
+function osv(posts,from,to,org,acc){
+  const rows={};const get=k=>rows[k]=rows[k]||{key:k,open:0,dt:0,kt:0,close:0,cur:{}};
+  for(const p of posts){
+    if(org&&p.org!==org)continue;if(to&&p.date>to)continue;
+    const before=from&&p.date<from;
+    for(const [s,k] of [[p.dt,1],[p.kt,-1]]){
+      if(acc&&s.acc!==acc)continue;
+      const x=get(acc?s.an:s.acc);
+      if(before)x.open+=k*p.sum;else if(k>0)x.dt+=p.sum;else x.kt+=p.sum;
+      if(s.cur!==BASE)x.cur[s.cur]=r2((x.cur[s.cur]||0)+k*s.amt);
+    }
+  }
+  for(const k in rows){const x=rows[k];x.open=r2(x.open);x.dt=r2(x.dt);x.kt=r2(x.kt);x.close=r2(x.open+x.dt-x.kt);}
+  return rows;
 }
 /*ENDLOGIC*/
 
@@ -438,6 +535,7 @@ let authState='loading',ownerUid=null,ownerLoaded=false,rolesSub=null;
 let baseWrite=true,isOwner=false,roles={},rolesLoaded=false,members={};
 let audit=[],auditSeen=0,auditLoaded=false;const auditBy={},auditSubs={};
 ui.audit={all:false,limit:150};
+ui.acc={month:thisMonth(),org:'',acc:'',an:''};
 
 /* ---------- helpers ---------- */
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -464,7 +562,7 @@ function sgn(v){return v>0.004?'pos':v<-0.004?'neg':'';}
 
 /* ---------- rendering ---------- */
 const IS_TEST=/^\/test(\/|$)/.test(location.pathname);
-const TABS=['kasy','panel','kliienty','zhurnal','zvit','zminy','nalashtuvannia','moia'].concat(IS_TEST?['perevirka']:[]);
+const TABS=['kasy','panel','kliienty','zhurnal','zvit','zminy','rakhunky','nalashtuvannia','moia'].concat(IS_TEST?['perevirka']:[]);
 let ETA=null,etaLoading=false,resetAsk=false,resetBusy=false;
 function loadEta(){if(ETA||etaLoading||!IS_TEST)return;etaLoading=true;import('./etalon.js').then(m=>{ETA=m;render();}).catch(()=>{etaLoading=false;});}
 function myRole(){if(isOwner)return 'owner';const r=me.id&&roles[me.id];return r&&r.role||'none';}
@@ -474,7 +572,7 @@ function canEditOp(o){const r=myRole();return r==='owner'||((r==='full'||r==='ca
 function allowedTabs(){const r=myRole();return r==='owner'?TABS.filter(t=>t!=='moia'):(r==='full'||r==='viewer')?TABS.filter(t=>t!=='moia'&&t!=='nalashtuvannia'):r==='cashier'?['moia']:[];}
 function setTabFromHash(){const h=(location.hash||'').slice(1);ui.tab=TABS.includes(h)?h:'kasy';}
 function render(full){
-  document.querySelectorAll('nav.tabs a').forEach(a=>a.classList.toggle('on',a.dataset.tab===ui.tab||(a.dataset.tab==='zvit'&&ui.tab==='zminy')));
+  document.querySelectorAll('nav.tabs a').forEach(a=>a.classList.toggle('on',a.dataset.tab===ui.tab||(a.dataset.tab==='zvit'&&(ui.tab==='zminy'||ui.tab==='rakhunky'))));
   const nb=newAuditCount();const bg=document.getElementById('badge');if(bg){bg.hidden=!nb;bg.textContent=nb>99?'99+':String(nb);}
   const role=myRole();const tabs=allowedTabs();renderTestBar();
   if(rolesLoaded&&tabs.length&&!tabs.includes(ui.tab))ui.tab=tabs[0];
@@ -499,10 +597,10 @@ function render(full){
   if(role==='none'){v.dataset.tab='';v.innerHTML=`<div class="empty-state"><b>Доступ ще не надано.</b><br>${me.id?'Вадим має призначити вам роль у застосунку. Після цього сторінка оновиться сама.':'Не вдалося визначити ваш акаунт. Увійдіть у Claude і відкрийте посилання ще раз.'}</div>`;return;}
   if(full||!document.getElementById('dyn')||v.dataset.tab!==ui.tab){
     v.dataset.tab=ui.tab;
-    v.innerHTML=(ui.tab==='zhurnal'?journalHead():ui.tab==='zvit'?reportHead():ui.tab==='zminy'?auditHead():'')+'<div id="dyn"></div>';
+    v.innerHTML=(ui.tab==='zhurnal'?journalHead():ui.tab==='zvit'?reportHead():ui.tab==='zminy'?auditHead():ui.tab==='rakhunky'?accHead():'')+'<div id="dyn"></div>';
   }
   const M=model();curM=M;
-  document.getElementById('dyn').innerHTML=ui.tab==='kasy'?kasyBody(M):ui.tab==='panel'?panelBody(M):ui.tab==='kliienty'?clientsBody(M):ui.tab==='zhurnal'?journalBody(M):ui.tab==='zvit'?reportBody(M):ui.tab==='zminy'?auditBody():ui.tab==='perevirka'?perevirkaBody(M):ui.tab==='moia'?cashierBody(M):settingsBody(M);
+  document.getElementById('dyn').innerHTML=ui.tab==='kasy'?kasyBody(M):ui.tab==='panel'?panelBody(M):ui.tab==='kliienty'?clientsBody(M):ui.tab==='zhurnal'?journalBody(M):ui.tab==='zvit'?reportBody(M):ui.tab==='zminy'?auditBody():ui.tab==='rakhunky'?accBody(M):ui.tab==='perevirka'?perevirkaBody(M):ui.tab==='moia'?cashierBody(M):settingsBody(M);
 }
 function cashierBody(M){
   const b=myBox();const box=C().boxes.find(x=>x.id===b);
@@ -526,7 +624,7 @@ function perevirkaBody(M){
   const month=(cfg&&cfg.etalonMonth)||thisMonth();
   let ok=0,rows='',g='';
   for(const x of ETA.EXPECTED){
-    const a=ETA.actualValue(M,{currentRate,month},x.key);
+    const a=ETA.actualValue(M,{currentRate,osv,month},x.key);
     const good=a!=null&&Math.abs(a-x.value)<0.005;if(good)ok++;
     if(x.group!==g){g=x.group;rows+=`<tr class="sec"><td colspan="3">${esc(g)}</td></tr>`;}
     const f=v=>v==null?'—':(x.cur?fmt(v,x.cur):String(v));
@@ -746,17 +844,18 @@ function reportBody(M){
   }
   const res=tInc-tExp-tOz;
   const title=m?monthLabel(m):'Весь час';
-  let h=missingWarn(M);
+  let h=`<div class="card audit-card" style="margin-bottom:12px"><div><b>Рахунки</b><div class="small muted">Оборотно-сальдова відомість: кожна сума розкривається до операції</div></div><button class="btn" type="button" data-act="accgo" data-v="${esc('||'+(m||''))}">Відкрити</button></div>`+missingWarn(M);
   if(!tInc&&!tExp&&!tOz)h+=`<div class="empty-state" style="margin-top:14px">За ${m?'цей місяць':'весь час'} доходів і витрат немає.</div>`;
   else{
     const sorted=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]);
+    const go=(acc,cat)=>`class="click" data-act="accgo" data-v="${esc(acc+'|cat:'+cat+'|'+(m||''))}"`;
     h+=`<h2>P&amp;L · ${esc(title)}</h2><div class="tbl-wrap"><table><tbody>`;
     h+=`<tr class="sec"><td>Доходи</td><td>${fmtU(tInc)}</td></tr>`;
-    for(const [k,v] of sorted(inc))h+=`<tr><td class="ind">${esc(k)}</td><td>${fmtU(v)}</td></tr>`;
+    for(const [k,v] of sorted(inc))h+=`<tr ${go(incAcc(k),k)}><td class="ind">${esc(k)} ›</td><td>${fmtU(v)}</td></tr>`;
     h+=`<tr class="sec"><td>Поточні витрати</td><td>${fmtU(tExp)}</td></tr>`;
-    for(const [k,v] of sorted(exp))h+=`<tr><td class="ind">${esc(k)}</td><td>${fmtU(v)}</td></tr>`;
+    for(const [k,v] of sorted(exp))h+=`<tr ${go(expAcc(k),k)}><td class="ind">${esc(k)} ›</td><td>${fmtU(v)}</td></tr>`;
     h+=`<tr class="sec"><td>Основні засоби</td><td>${fmtU(tOz)}</td></tr>`;
-    for(const {o,u} of oz)h+=`<tr><td class="ind">${esc(o.assetName||'без назви')}</td><td>${fmtU(u)}</td></tr>`;
+    for(const {o,u} of oz)h+=`<tr class="click" data-act="opview" data-v="${esc(o.day+'|'+o.id)}"><td class="ind">${esc(o.assetName||'без назви')} ›</td><td>${fmtU(u)}</td></tr>`;
     h+=`<tr class="total"><td>Результат (P&amp;L)</td><td class="${sgn(res)}">${fmtU(res,true)}</td></tr>`;
     if(!m)h+=`<tr><td>Курсова різниця</td><td class="${sgn(M.fxDiff)}">${fmtU(M.fxDiff,true)}</td></tr><tr class="total"><td>Баланс</td><td class="${sgn(M.balance)}">${fmtU(M.balance)}</td></tr>`;
     h+=`</tbody></table></div>`;
@@ -784,6 +883,75 @@ function reportBody(M){
   }
   h+=`<div style="margin-top:26px">${auditCard()}</div>`;
   return h;
+}
+
+/* ---------- Рахунки: ОСВ → рахунок → аналітика → проводки → операція ---------- */
+function fmtN(v){const x=r2(v);return x?Math.abs(x).toLocaleString('uk-UA',{minimumFractionDigits:Number.isInteger(x)?0:2,maximumFractionDigits:2}):'';}
+function fmtS(v){const x=r2(v);return x?fmtN(x)+(x>0?' Дт':' Кт'):'';}
+function anLabel(an){if(!an)return '—';const i=an.indexOf(':');const k=an.slice(0,i),v=an.slice(i+1);return k==='box'?boxName(v):k==='cli'?clientName(v):v;}
+function accName(a){return ACC[a]?ACC[a][0]:a;}
+function accPeriod(){const m=ui.acc.month;return m?[m+'-01',m+'-31']:['',''];}
+function accHead(){
+  const a=ui.acc,m=a.month;
+  return `<div class="card"><div class="filters"><label>Місяць<input type="month" id="af-month" data-af="month" value="${esc(m)}"></label>
+  <label>Організація<select id="af-org" data-af="org">${opt('','Усі разом',a.org)}${ORGS.map(([k,n])=>opt(k,n,a.org)).join('')}</select></label></div>
+  <div class="row-actions"><button class="btn${m===thisMonth()?' on':''}" type="button" data-act="ap" data-v="month">Цей місяць</button><button class="btn${!m?' on':''}" type="button" data-act="ap" data-v="all">За весь час</button></div></div>`;
+}
+function accBody(M){
+  const a=ui.acc;const [from,to]=accPeriod();
+  const per=a.month?monthLabel(a.month):'весь час';
+  const head=`<tr><th>Рахунок</th><th>Дебет</th><th>Кредит</th><th>Сальдо</th></tr>`;
+  const opn=x=>a.month&&r2(x.open)?`<span class="an">на початок ${fmtS(x.open)}</span>`:'';
+  const cells=x=>`<td>${fmtN(x.dt)}</td><td>${fmtN(x.kt)}</td><td><b>${fmtS(x.close)}</b></td>`;
+  let h=missingWarn(M);
+  if(!a.acc){
+    const O=osv(M.posts,from,to,a.org,'');const codes=Object.keys(O).filter(k=>O[k].open||O[k].dt||O[k].kt).sort((x,y)=>ACC_ORDER.indexOf(x)-ACC_ORDER.indexOf(y));
+    if(!codes.length)return h+`<div class="empty-state">За цей період проводок немає.</div>`;
+    let t={open:0,dt:0,kt:0,close:0},rows='',sec='';
+    for(const k of codes){const x=O[k];const s=(ACC[k]||['','a'])[1];
+      if(s!==sec){sec=s;rows+=`<tr class="sec"><td colspan="4">${esc(ACC_SEC[s])}</td></tr>`;}
+      rows+=`<tr class="click" data-act="accopen" data-v="${esc(k)}"><td><span class="code">${esc(k)}</span> ›<span class="an">${esc(accName(k))}</span>${opn(x)}</td>${cells(x)}</tr>`;
+      t.dt+=x.dt;t.kt+=x.kt;}
+    const ok=Math.abs(r2(t.dt-t.kt))<0.01;
+    h+=`<h2>Оборотно-сальдова відомість · ${esc(per)}</h2><div class="tbl-wrap"><table class="osv"><thead>${head}</thead><tbody>${rows}<tr class="total"><td>Разом</td><td>${fmtN(t.dt)}</td><td>${fmtN(t.kt)}</td><td></td></tr></tbody></table></div>`;
+    h+=`<div class="okline">${ok?'✅ Дебет = Кредит: усе сходиться.':'❌ Дебет ≠ Кредит — помилка в розрахунках, напишіть Claude.'} Дт — дебетове сальдо (актив, витрата), Кт — кредитове (борг, дохід). Натисніть рахунок, щоб розкрити.</div>`;
+    return h;
+  }
+  const crumbs=[`<button type="button" data-act="accopen" data-v="">Усі рахунки</button>`];
+  if(!a.an){
+    const O=osv(M.posts,from,to,a.org,a.acc);const ks=Object.keys(O).filter(k=>O[k].open||O[k].dt||O[k].kt).sort((x,y)=>Math.abs(O[y].close)-Math.abs(O[x].close));
+    h+=`<div class="crumbs">${crumbs.join(' › ')} › <b>${esc(a.acc)} ${esc(accName(a.acc))}</b></div>`;
+    if(!ks.length)return h+`<div class="empty-state">За цей період проводок немає.</div>`;
+    const curs=x=>{const c=Object.keys(x.cur).filter(k=>x.cur[k]);return c.length?`<span class="an">${c.map(k=>fmt(x.cur[k],k)).join(' · ')}</span>`:'';};
+    h+=`<div class="tbl-wrap"><table class="osv"><thead>${head.replace('Рахунок','Аналітика')}</thead><tbody>${ks.map(k=>`<tr class="click" data-act="anopen" data-v="${esc(k)}"><td>${esc(anLabel(k))} ›${curs(O[k])}${opn(O[k])}</td>${cells(O[k])}</tr>`).join('')}</tbody></table></div>`;
+    h+=`<div class="okline">Натисніть рядок, щоб побачити проводки.</div>`;
+    return h;
+  }
+  crumbs.push(`<button type="button" data-act="accopen" data-v="${esc(a.acc)}">${esc(a.acc)} ${esc(accName(a.acc))}</button>`);
+  h+=`<div class="crumbs">${crumbs.join(' › ')} › <b>${esc(anLabel(a.an))}</b></div>`;
+  const list=M.posts.filter(p=>(!a.org||p.org===a.org)&&(!from||p.date>=from)&&(!to||p.date<=to)&&((p.dt.acc===a.acc&&p.dt.an===a.an)||(p.kt.acc===a.acc&&p.kt.an===a.an)));
+  if(!list.length)return h+`<div class="empty-state">За цей період проводок немає.</div>`;
+  list.sort((x,y)=>x.date<y.date?1:x.date>y.date?-1:(y.ts||0)-(x.ts||0));
+  let td=0,tk=0;
+  const rows=list.map(p=>{const isDt=p.dt.acc===a.acc&&p.dt.an===a.an;const me_=isDt?p.dt:p.kt,other=isDt?p.kt:p.dt;
+    const o=p.opId&&findOp(p.day+'|'+p.opId);const title=o?opTitle(o)[0]:'';const cur=me_.cur!==BASE&&me_.amt?` · ${fmt(me_.amt,me_.cur)}`:'';
+    if(isDt)td+=p.sum;else tk+=p.sum;
+    return `<tr${o?` class="click" data-act="opview" data-v="${esc(p.day+'|'+p.opId)}"`:''}><td>${shortDate(p.date).slice(0,5)} ${esc(p.note||title)}${o?' ›':''}<span class="an">кор. ${esc(other.acc)} ${esc(accName(other.acc))}${other.an?' · '+esc(anLabel(other.an)):''}${cur}${o&&o.comment?' · '+esc(o.comment):''}</span></td><td>${isDt?fmtN(p.sum):''}</td><td>${isDt?'':fmtN(p.sum)}</td></tr>`;}).join('');
+  h+=`<div class="tbl-wrap"><table class="osv"><thead><tr><th>Проводка</th><th>Дебет</th><th>Кредит</th></tr></thead><tbody>${rows}<tr class="total"><td>Разом за ${esc(per)}</td><td>${fmtN(td)}</td><td>${fmtN(tk)}</td></tr></tbody></table></div>`;
+  h+=`<div class="okline">Натисніть проводку, щоб відкрити операцію. «кор.» — рахунок, з яким пройшла проводка.</div>`;
+  return h;
+}
+
+function accSettings(){
+  if(!canAdmin)return '';const c=C();const ac=c.acct||{};
+  const sel=(attr,key,val,opts)=>`<select data-${attr}="${esc(key)}" aria-label="Рахунок для ${esc(key)}">${opts.map(([v,l])=>opt(v,l,val)).join('')}</select>`;
+  const accOpts=list=>list.map(k=>[k,k+' '+accName(k)]);
+  let h=`<h2>Облік: рахунки</h2><div class="card"><div class="hint" style="margin-bottom:8px">Куди застосунок записує кожну операцію. Можна змінити будь-коли — усі звіти, і старі теж, перерахуються самі.</div>`;
+  h+=`<b class="small acc-sub">Каси → організація</b><div>${c.boxes.filter(b=>!b.archived).map(b=>`<div class="acl"><span>${esc(b.name)}</span>${sel('borg',b.id,b.org||'cash',ORGS)}</div>`).join('')}</div>`;
+  h+=`<b class="small acc-sub">Клієнти → тип</b><div>${clientList().map(x=>`<div class="acl"><span>${esc(x.name)}</span>${sel('ckind',x.id,clientKind(x.id),Object.keys(CLIENT_KINDS).map(k=>[k,CLIENT_KINDS[k][0]+' ('+CLIENT_KINDS[k][1]+')']))}</div>`).join('')}</div>`;
+  h+=`<b class="small acc-sub">Види витрат → рахунок</b><div>${[...c.categories,OZ_CAT].map(k=>`<div class="acl"><span>${esc(k)}</span>${sel('eacc',k,expAcc(k),accOpts(EXP_ACCS))}</div>`).join('')}</div>`;
+  h+=`<b class="small acc-sub">Види доходу → рахунок</b><div>${c.incomeCategories.map(k=>`<div class="acl"><span>${esc(k)}</span>${sel('iacc',k,incAcc(k),accOpts(INC_ACCS))}</div>`).join('')}</div>`;
+  return h+`</div>`;
 }
 
 function peopleSection(){
@@ -839,6 +1007,7 @@ function settingsBody(M){
   h+=chips('categories','Види витрат','Напр. Електрика');
   h+=chips('incomeCategories','Види доходу','Напр. Повернення за товар');
   h+=chips('currencies','Валюти','Код, напр. PLN');
+  h+=accSettings();
   return peopleSection()+h;
 }
 
@@ -1118,6 +1287,10 @@ document.addEventListener('click',async e=>{
     case 'migrate':{const f=document.getElementById('mig-file');if(!f||!f.files||!f.files[0]){const st=document.getElementById('mig-status');if(st)st.textContent='Спочатку оберіть файл.';return;}el.disabled=true;await importData(f.files[0]);el.disabled=false;break;}
     case 'claimempty':el.disabled=true;await claimEmpty();break;
     case 'goaudit':location.hash='#zminy';break;
+    case 'accgo':{const [acc,an,m]=v.split('|');ui.acc={month:m||'',org:'',acc:acc||'',an:an||''};if(ui.tab==='rakhunky')render(true);else location.hash='#rakhunky';break;}
+    case 'accopen':ui.acc.acc=v;ui.acc.an='';render();window.scrollTo(0,0);break;
+    case 'anopen':ui.acc.an=v;render();window.scrollTo(0,0);break;
+    case 'ap':ui.acc.month=v==='month'?thisMonth():'';render(true);break;
     case 'aufilter':ui.audit.all=v==='all';render(true);break;
     case 'aumore':ui.audit.limit+=150;render();break;
     case 'auseen':{auditSeen=Date.now();render(true);if(me.id){try{await db.doc('data/users/'+me.id+'/prefs').set({auditSeen});toast('Позначено переглянутим');}catch(e3){toast('Не вдалося зберегти');}}break;}
@@ -1148,6 +1321,11 @@ document.addEventListener('input',e=>{
   if(t.dataset.jf){ui.f[t.dataset.jf]=t.value;ui.dayLimit=30;render();return;}
   if(t.dataset.eod){ui.eodDate=t.value;render();return;}
   if(t.dataset.rf){ui.rep[t.dataset.rf]=t.value;render(true);return;}
+  if(t.dataset.af){ui.acc[t.dataset.af]=t.value;render(true);return;}
+  if(canAdmin&&(t.dataset.borg||t.dataset.ckind||t.dataset.eacc||t.dataset.iacc)){const c=cloneCfg();c.acct=c.acct||{};
+    if(t.dataset.borg){const b=c.boxes.find(x=>x.id===t.dataset.borg);if(b)b.org=t.value;}
+    else{const g=t.dataset.ckind?'clients':t.dataset.eacc?'exp':'inc';const k=t.dataset.ckind||t.dataset.eacc||t.dataset.iacc;c.acct[g]=Object.assign({},c.acct[g],{[k]:t.value});}
+    saveCfg(c,true);toast('Збережено');return;}
   if(t.dataset.sb&&canAdmin){const c=cloneCfg();c.boxes[+t.dataset.i][t.dataset.sb]=t.value;saveCfg(c);return;}
   if(t.dataset.rate&&canAdmin){const c=cloneCfg();c.rates=c.rates||{};const r=num(t.value);if(r>0)c.rates[t.dataset.rate]=r;else delete c.rates[t.dataset.rate];saveCfg(c);return;}
   if(t.dataset.sc&&canWrite){renameClient(t.dataset.sc,t.value);return;}

@@ -8,6 +8,15 @@
 //  У касах: 3150₴ + 890$×40 = 38 750₴.  Баланс: 38 750 + 200 − 40 000 = −1050₴.
 //  P&L: дохід 50 − витрати (200+100+10$×40=700) − ОЗ 400 = −1050₴.  Курсова різниця 0.
 //  Одна видалена операція на 999₴ — не має рахуватися ніде.
+//
+//  Рахунки (подвійний запис, усе в гривні за курсом 40). Інвестор має тип «Інвестор» → рахунок 60,
+//  Клієнт — тип «Інший» → 377. Ремонт і Зарплата → 91, ОЗ → 949, Інший дохід → 719.
+//    301 Каса ₴  = 3150 (Дт 4000+1000+50+100, Кт 1000+200+100+400+300)
+//    302 Каса $  = 35 600 (Дт 40 000, Кт 4000+400) = 890 $ × 40
+//    377 Клієнт  = 200 (Дт 300, Кт 100)
+//    60 Інвестор = −40 000 (кредитове сальдо: ми винні)
+//    91 = 700 (200+100+10$×40), 949 = 400, 719 = −50 (кредитове)
+//    Сума сальдо = 0, Оборот Дт = Оборот Кт = 46 550.
 
 export function etalonData(month) {
   const d = n => month + '-' + String(n).padStart(2, '0');
@@ -37,7 +46,8 @@ export function etalonData(month) {
     config: {
       boxes: [{ id: 'b-a', name: 'Каса А', archived: false }, { id: 'b-b', name: 'Каса Б', archived: false }],
       categories: ['Ремонт', 'Зарплата', 'Інше'], incomeCategories: ['Інший дохід'],
-      currencies: ['UAH', 'USD'], rates: {}, legacyNames: { etalon: 'Еталон' }, etalonMonth: month
+      currencies: ['UAH', 'USD'], rates: {}, legacyNames: { etalon: 'Еталон' }, etalonMonth: month,
+      acct: { clients: { 'c-inv': 'investor' }, exp: {}, inc: {} }
     },
     clients: { 'c-inv': { name: 'Інвестор', archived: false }, 'c-cl': { name: 'Клієнт', archived: false } },
     days
@@ -61,6 +71,18 @@ export const EXPECTED = [
   { group: 'Звіт',    label: 'Доходи за місяць',          key: 'month:inc',   value: 50,     cur: 'UAH' },
   { group: 'Звіт',    label: 'Витрати за місяць (без ОЗ)', key: 'month:exp',  value: 700,    cur: 'UAH' },
   { group: 'Звіт',    label: 'Основні засоби за місяць',  key: 'month:oz',    value: 400,    cur: 'UAH' },
+  { group: 'Рахунки', label: '301 Каса в гривні',          key: 'acc:301',     value: 3150,   cur: 'UAH' },
+  { group: 'Рахунки', label: '302 Каса в валюті (у гривні)', key: 'acc:302',   value: 35600,  cur: 'UAH' },
+  { group: 'Рахунки', label: '302 Каса в валюті, долари',  key: 'acccur:302:USD', value: 890, cur: 'USD' },
+  { group: 'Рахунки', label: '377 Інші дебітори (Клієнт)',  key: 'acc:377',    value: 200,    cur: 'UAH' },
+  { group: 'Рахунки', label: '60 Позики (Інвестор), кредит', key: 'acc:60',    value: -40000, cur: 'UAH' },
+  { group: 'Рахунки', label: '91 Загальновиробничі витрати', key: 'acc:91',    value: 700,    cur: 'UAH' },
+  { group: 'Рахунки', label: '949 Інші витрати (ОЗ)',      key: 'acc:949',     value: 400,    cur: 'UAH' },
+  { group: 'Рахунки', label: '719 Інші доходи, кредит',    key: 'acc:719',     value: -50,    cur: 'UAH' },
+  { group: 'Рахунки', label: '714 − 945 Курсова різниця',  key: 'accfx',       value: 0,      cur: 'UAH' },
+  { group: 'Рахунки', label: 'Оборот Дт за місяць',        key: 'turn:dt',     value: 46550,  cur: 'UAH' },
+  { group: 'Рахунки', label: 'Оборот Кт за місяць',        key: 'turn:kt',     value: 46550,  cur: 'UAH' },
+  { group: 'Рахунки', label: 'Сума всіх сальдо (має бути 0)', key: 'accsum',   value: 0,      cur: 'UAH' },
   { group: 'Інше',    label: 'Курс долара',               key: 'rate:USD',    value: 40,     cur: 'UAH' },
   { group: 'Інше',    label: 'Кількість операцій (без видалених)', key: 'ops', value: 10,    cur: '' },
 ];
@@ -68,6 +90,8 @@ export const EXPECTED = [
 // Фактичне значення показника з розрахунків застосунку (model()).
 export function actualValue(M, ctx, key) {
   const p = key.split(':');
+  const O = p[0].startsWith('acc') || p[0] === 'turn' ? ctx.osv(M.posts, '', '', '', '') : null;
+  const bal = a => O[a] ? O[a].close : 0;
   const mm = M.months[ctx.month] || { inc: 0, exp: 0, oz: 0 };
   switch (p[0]) {
     case 'box': return ((M.boxes[p[1]] || {})[p[2]]) || 0;
@@ -82,6 +106,11 @@ export function actualValue(M, ctx, key) {
     case 'month': return Math.round((mm[p[1]] || 0) * 100) / 100;
     case 'rate': return ctx.currentRate(p[1], M.hist);
     case 'ops': return M.ops.length;
+    case 'acc': return bal(p[1]);
+    case 'acccur': return O[p[1]] ? (O[p[1]].cur[p[2]] || 0) : 0;
+    case 'accfx': return Math.round(-(bal('714') + bal('945')) * 100) / 100;
+    case 'accsum': { let t = 0; for (const k in O) t += O[k].close; return Math.round(t * 100) / 100; }
+    case 'turn': { const m = ctx.osv(M.posts, ctx.month + '-01', ctx.month + '-31', '', ''); let t = 0; for (const k in m) t += m[k][p[1]]; return Math.round(t * 100) / 100; }
   }
   return null;
 }
