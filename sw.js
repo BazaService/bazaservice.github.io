@@ -1,11 +1,12 @@
 // Офлайн-режим: застосунок відкривається навіть без інтернету.
-const V = 'bs-v7';
+const SCOPE = self.registration.scope;
+const V = 'bs-v8|' + SCOPE;
 const CORE = ['./', './index.html', './firebase-config.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V && (k.endsWith('|' + SCOPE) || !k.includes('|'))).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 async function fromCache(req) {
   return (await caches.match(req)) || (await caches.match('./index.html'));

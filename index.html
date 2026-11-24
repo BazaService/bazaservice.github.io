@@ -262,6 +262,11 @@ nav.tabs a{position:relative}
 .pc{display:flex;gap:6px;flex-wrap:wrap}
 .pc select{width:auto;min-width:140px}
 .ver{text-align:center;font-size:11px;color:var(--muted);padding:0 0 calc(80px + env(safe-area-inset-bottom,0px));opacity:.6}
+.testbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;background:var(--out);color:#fff;border-radius:12px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+.testbar .tb-btns{display:flex;gap:6px;flex-wrap:wrap}
+.testbar button{border:1px solid rgba(255,255,255,.7);background:transparent;color:#fff;border-radius:8px;padding:6px 10px;font-weight:700;font-size:12px}
+.chk-sum{margin-bottom:10px}.chk-sum.good{background:var(--in-soft);color:var(--in);border-color:var(--in)}.chk-sum.badc{background:var(--out-soft);color:var(--out);border-color:var(--out)}
+tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 144px);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-weight:700;z-index:60;font-size:14px}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
 .net{border-radius:12px;padding:10px 12px;font-weight:700;font-size:13px;margin-bottom:12px}
@@ -279,6 +284,7 @@ nav.tabs a{position:relative}
 <body>
 <div class="wrap">
   <header class="top"><h1>Baza Service</h1><span class="r"><span class="who" id="who"></span><button class="logout" id="logout" type="button" data-act="logout" hidden>Вийти</button><a class="gear" id="gear" href="#nalashtuvannia" aria-label="Налаштування"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></a></span></header>
+  <div id="testbar" class="testbar" hidden></div>
   <div id="net" class="net" hidden></div>
   <main id="view"><div class="empty-state">Завантажую дані каси…</div></main>
 </div>
@@ -291,7 +297,7 @@ nav.tabs a{position:relative}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 7</div>
+<div class="ver" id="ver">версія 8</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -457,7 +463,10 @@ function sortCurs(list){const order=C().currencies;return [...new Set(list)].sor
 function sgn(v){return v>0.004?'pos':v<-0.004?'neg':'';}
 
 /* ---------- rendering ---------- */
-const TABS=['kasy','panel','kliienty','zhurnal','zvit','zminy','nalashtuvannia','moia'];
+const IS_TEST=/^\/test(\/|$)/.test(location.pathname);
+const TABS=['kasy','panel','kliienty','zhurnal','zvit','zminy','nalashtuvannia','moia'].concat(IS_TEST?['perevirka']:[]);
+let ETA=null,etaLoading=false,resetAsk=false,resetBusy=false;
+function loadEta(){if(ETA||etaLoading||!IS_TEST)return;etaLoading=true;import('./etalon.js').then(m=>{ETA=m;render();}).catch(()=>{etaLoading=false;});}
 function myRole(){if(isOwner)return 'owner';const r=me.id&&roles[me.id];return r&&r.role||'none';}
 function myBox(){const r=me.id&&roles[me.id];return r&&r.box||'';}
 function isCashier(){return myRole()==='cashier';}
@@ -467,7 +476,7 @@ function setTabFromHash(){const h=(location.hash||'').slice(1);ui.tab=TABS.inclu
 function render(full){
   document.querySelectorAll('nav.tabs a').forEach(a=>a.classList.toggle('on',a.dataset.tab===ui.tab||(a.dataset.tab==='zvit'&&ui.tab==='zminy')));
   const nb=newAuditCount();const bg=document.getElementById('badge');if(bg){bg.hidden=!nb;bg.textContent=nb>99?'99+':String(nb);}
-  const role=myRole();const tabs=allowedTabs();
+  const role=myRole();const tabs=allowedTabs();renderTestBar();
   if(rolesLoaded&&tabs.length&&!tabs.includes(ui.tab))ui.tab=tabs[0];
   document.getElementById('gear').classList.toggle('on',ui.tab==='nalashtuvannia');
   document.getElementById('gear').hidden=role!=='owner';
@@ -481,7 +490,7 @@ function render(full){
     if(authState==='out'){v.innerHTML=`<div class="login"><h2>Baza Service</h2><p>Увійдіть своїм Google-акаунтом, щоб працювати з касою.</p><button class="gbtn" type="button" data-act="login">Увійти через Google</button></div>`;return;}
     v.innerHTML=`<div class="card mig"><b>Перший запуск</b><div class="small muted">Ви перший, хто увійшов. Станьте власником і перенесіть дані зі старого застосунку: оберіть файл перенесення, який надіслав Claude.</div>
       <input type="file" id="mig-file" accept=".json,application/json"><button class="btn primary" type="button" data-act="migrate">Стати власником і перенести дані</button>
-      <div class="small" id="mig-status"></div><button class="linkbtn" type="button" data-act="claimempty">Почати з нуля без перенесення</button></div>`;
+      <div class="small" id="mig-status"></div><button class="linkbtn" type="button" data-act="claimempty">Почати з нуля без перенесення</button>${IS_TEST?'<button class="btn primary" type="button" data-act="claimetalon">Тестова база: стати власником і заповнити еталоном</button>':''}</div>`;
     return;
   }
   if(rolesLoaded&&role==='none'){v.dataset.tab='';v.innerHTML=`<div class="empty-state"><b>Доступ ще не надано.</b><br>Власник має призначити вам роль у застосунку. Після цього сторінка оновиться сама.</div>`;return;}
@@ -493,7 +502,7 @@ function render(full){
     v.innerHTML=(ui.tab==='zhurnal'?journalHead():ui.tab==='zvit'?reportHead():ui.tab==='zminy'?auditHead():'')+'<div id="dyn"></div>';
   }
   const M=model();curM=M;
-  document.getElementById('dyn').innerHTML=ui.tab==='kasy'?kasyBody(M):ui.tab==='panel'?panelBody(M):ui.tab==='kliienty'?clientsBody(M):ui.tab==='zhurnal'?journalBody(M):ui.tab==='zvit'?reportBody(M):ui.tab==='zminy'?auditBody():ui.tab==='moia'?cashierBody(M):settingsBody(M);
+  document.getElementById('dyn').innerHTML=ui.tab==='kasy'?kasyBody(M):ui.tab==='panel'?panelBody(M):ui.tab==='kliienty'?clientsBody(M):ui.tab==='zhurnal'?journalBody(M):ui.tab==='zvit'?reportBody(M):ui.tab==='zminy'?auditBody():ui.tab==='perevirka'?perevirkaBody(M):ui.tab==='moia'?cashierBody(M):settingsBody(M);
 }
 function cashierBody(M){
   const b=myBox();const box=C().boxes.find(x=>x.id===b);
@@ -503,6 +512,49 @@ function cashierBody(M){
   const saved=ui.f;ui.f={from:'',to:'',box:b,client:'',type:'',cat:'',q:''};
   h+=`<h2>Мої операції</h2>`+journalBody(M);ui.f=saved;
   return h;
+}
+function renderTestBar(){
+  const el=document.getElementById('testbar');if(!el||!IS_TEST)return;
+  el.hidden=false;
+  const owner=isOwner&&authState==='in'&&db;
+  el.innerHTML=resetAsk
+    ?`<span><b>Скинути тестову базу до еталону?</b> Усі тестові операції буде видалено.</span><span class="tb-btns"><button type="button" data-act="reset2" ${resetBusy?'disabled':''}>${resetBusy?'Скидаю…':'Так, скинути'}</button><button type="button" data-act="reset0">Ні</button></span>`
+    :`<span><b>ТЕСТОВА ВЕРСІЯ</b> · справжні дані не чіпаються</span><span class="tb-btns"><button type="button" data-act="go" data-v="perevirka">Перевірка</button>${owner?'<button type="button" data-act="reset1">Скинути до еталону</button>':''}</span>`;
+}
+function perevirkaBody(M){
+  if(!ETA){loadEta();return '<div class="empty-state">Завантажую еталон…</div>';}
+  const month=(cfg&&cfg.etalonMonth)||thisMonth();
+  let ok=0,rows='',g='';
+  for(const x of ETA.EXPECTED){
+    const a=ETA.actualValue(M,{currentRate,month},x.key);
+    const good=a!=null&&Math.abs(a-x.value)<0.005;if(good)ok++;
+    if(x.group!==g){g=x.group;rows+=`<tr class="sec"><td colspan="3">${esc(g)}</td></tr>`;}
+    const f=v=>v==null?'—':(x.cur?fmt(v,x.cur):String(v));
+    rows+=`<tr class="${good?'':'badrow'}"><td>${good?'✅':'❌'} ${esc(x.label)}</td><td>${f(x.value)}</td><td>${f(a)}</td></tr>`;
+  }
+  const n=ETA.EXPECTED.length,all=ok===n;
+  return `<div class="card chk-sum ${all?'good':'badc'}"><b>${all?'✅ Усе збігається з еталоном':'❌ Є розбіжності з еталоном'}</b><div class="small">${ok} з ${n} показників правильні</div></div>
+  <div class="legend" style="margin-bottom:10px">Якщо ви вносили свої тестові операції, розбіжності — це нормально. Натисніть «Скинути до еталону» вгорі, і все має знову стати зеленим.</div>
+  <div class="tbl-wrap"><table><thead><tr><th>Показник</th><th>Очікується</th><th>Є</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+async function resetEtalon(){
+  if(!isOwner||!db){toast('Скидати може тільки власник');return;}
+  if(!IS_TEST||!/-test$/.test(firebaseConfig.projectId||'')){toast('Скидання дозволене тільки в тестовій базі');return;}
+  if(!navigator.onLine){toast('Для скидання потрібен інтернет');return;}
+  resetBusy=true;renderTestBar();
+  try{
+    if(!ETA)ETA=await import('./etalon.js');
+    const e=ETA.etalonData(thisMonth());
+    const b=writeBatch(FB.fs);
+    for(const d in days)if(!e.days[d])b.delete(fdoc(FB.fs,'days/'+d));
+    for(const id in clients)if(!e.clients[id])b.delete(fdoc(FB.fs,'clients/'+id));
+    b.set(fdoc(FB.fs,'config/main'),Object.assign({},e.config,{etalonMonth:thisMonth()}));
+    for(const id in e.clients)b.set(fdoc(FB.fs,'clients/'+id),e.clients[id]);
+    for(const d in e.days)b.set(fdoc(FB.fs,'days/'+d),{ops:e.days[d]});
+    await b.commit();
+    toast('Тестову базу скинуто до еталону');location.hash='#perevirka';
+  }catch(err){toast('Не вдалося скинути: '+(err.code||err.message));}
+  resetBusy=false;resetAsk=false;renderTestBar();
 }
 function missingWarn(M){
   if(!M.missing.size)return '';
@@ -1058,6 +1110,10 @@ document.addEventListener('click',async e=>{
     case 'opdel2':{if(!db)await dbReady;const [d,id]=v.split('|');const before=cleanOp(findOp(v));el.disabled=true;try{await db.doc('days/'+d).update({ops:{[id]:{deleted:true,deletedBy:me.id,deletedTs:Date.now()}}});let logged=true;try{await logAudit('delete',id,before,null);}catch(e2){logged=false;}closeSheet();toast(logged?'Операцію видалено':'Видалено, але історію не записано');}catch(err){el.disabled=false;toast('Не вдалося видалити');}break;}
     case 'disp':ui.disp=v;try{localStorage.setItem('kasa.disp',v);}catch(e){}render();break;
     case 'login':doLogin();break;
+    case 'reset1':resetAsk=true;renderTestBar();break;
+    case 'reset0':resetAsk=false;renderTestBar();break;
+    case 'reset2':await resetEtalon();break;
+    case 'claimetalon':{el.disabled=true;try{await claimOwner();await setDoc(fdoc(FB.fs,'roles/main'),{users:{}});const w=()=>new Promise(r=>setTimeout(r,800));await w();await resetEtalon();}catch(err){toast('Помилка: '+(err.code||err.message));el.disabled=false;}break;}
     case 'logout':clearSnap();if(!FB.auth){location.reload();break;}signOut(FB.auth).then(()=>location.reload());break;
     case 'migrate':{const f=document.getElementById('mig-file');if(!f||!f.files||!f.files[0]){const st=document.getElementById('mig-status');if(st)st.textContent='Спочатку оберіть файл.';return;}el.disabled=true;await importData(f.files[0]);el.disabled=false;break;}
     case 'claimempty':el.disabled=true;await claimEmpty();break;
@@ -1158,7 +1214,7 @@ function startData(){
 
 /* ---------- instant start: last known data saved on the phone ---------- */
 let dbReadyResolve;const dbReady=new Promise(r=>dbReadyResolve=r);
-const SNAP_KEY='bs.snap.v1';let snapT=null,snapRestored=false,authStarted=false;
+const SNAP_KEY=IS_TEST?'bs.snap.test.v1':'bs.snap.v1';let snapT=null,snapRestored=false,authStarted=false;
 function saveSnap(){clearTimeout(snapT);snapT=setTimeout(()=>{try{if(me&&me.id&&ownerUid)localStorage.setItem(SNAP_KEY,JSON.stringify({me,ownerUid,roles,cfg,clients,days,members}));}catch(e){}},600);}
 function clearSnap(){try{localStorage.removeItem(SNAP_KEY);}catch(e){}}
 function restoreSnap(){
@@ -1216,6 +1272,7 @@ async function doLogin(){
   }
 }
 
+if(IS_TEST){document.title='Baza Service ТЕСТ';const h=document.querySelector('header.top h1');if(h)h.textContent='Baza Service ТЕСТ';}
 setTabFromHash();restoreSnap();render(true);
 loadSdk().then(()=>{
 initFB();
