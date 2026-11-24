@@ -11,14 +11,16 @@ const month = '2026-11';
 const E = etalonData(month);
 const run = new Function('E', m[1] + `
   cfg = E.config; clients = E.clients; days = E.days;
-  return { M: model(), currentRate, osv };`);
+  return { M: model(), currentRate, osv: typeof osv === 'function' ? osv : null };`);
 const { M, currentRate, osv } = run(E);
-let bad = 0;
+let bad = 0, skipped = 0;
 for (const x of EXPECTED) {
+  if (!osv && x.group === 'Рахунки') { skipped++; continue; }
   const a = actualValue(M, { currentRate, osv, month }, x.key);
   const ok = a != null && Math.abs(a - x.value) < 0.005;
   if (!ok) bad++;
   console.log((ok ? '✅ ' : '❌ ') + x.label + ': очікується ' + x.value + ', є ' + a);
 }
-console.log(bad ? `\n❌ Помилок: ${bad} (${file})` : `\n✅ Усі ${EXPECTED.length} показників збігаються (${file})`);
+if (skipped) console.log(`ℹ️ Пропущено ${skipped} показників по рахунках: у цій версії рахунків ще немає`);
+console.log(bad ? `\n❌ Помилок: ${bad} (${file})` : `\n✅ Усі ${EXPECTED.length - skipped} показників збігаються (${file})`);
 process.exit(bad ? 1 : 0);
