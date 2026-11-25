@@ -1,3 +1,5 @@
+// Версія еталону: збільшувати, коли змінюються дані еталону. Якщо в базі старіша — «Перевірка» попросить скинути.
+export const ETALON_VER = 2;
 // Еталонні дані для тестової версії і очікувані результати.
 // Суми круглі, щоб усе можна було порахувати в голові. Курс USD = 40 (з обміну).
 //
@@ -46,7 +48,7 @@ export function etalonData(month) {
     config: {
       boxes: [{ id: 'b-a', name: 'Каса А', archived: false }, { id: 'b-b', name: 'Каса Б', archived: false }],
       categories: ['Ремонт', 'Зарплата', 'Інше'], incomeCategories: ['Інший дохід'],
-      currencies: ['UAH', 'USD'], rates: {}, legacyNames: { etalon: 'Еталон' }, etalonMonth: month,
+      currencies: ['UAH', 'USD'], rates: {}, legacyNames: { etalon: 'Еталон' }, etalonMonth: month, etalonVer: ETALON_VER,
       acct: { clients: { 'c-inv': 'investor' }, exp: {}, inc: {} }
     },
     clients: { 'c-inv': { name: 'Інвестор', archived: false }, 'c-cl': { name: 'Клієнт', archived: false } },

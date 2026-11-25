@@ -95,7 +95,7 @@ tr:last-child td{border-bottom:0}
 tr.total td{font-weight:800;background:var(--surface-2)}
 tr.sec td{font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:var(--surface-2)}
 td.ind{padding-left:22px}
-tr.click{cursor:pointer}tr.click:active td{background:var(--surface-2)}
+tr.click{cursor:pointer}.stat.click,.hero.click{cursor:pointer}.stat.click:active,.hero.click:active{opacity:.75}tr.click:active td{background:var(--surface-2)}
 td .an{display:block;font-size:12px;color:var(--muted);font-weight:400}
 td.code{font-weight:800}
 .acl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:8px;align-items:center;margin:6px 0}.acl span{font-size:14px;overflow-wrap:anywhere}.acl select{width:100%;min-width:0}.acc-sub{display:block;margin:14px 0 4px}
@@ -305,7 +305,7 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 9</div>
+<div class="ver" id="ver">версія 10</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -465,6 +465,7 @@ function incAcc(cat){const m=(acctCfg().inc||{})[cat];return ACC[m]?m:'719';}
 function boxOrg(id){const b=C().boxes.find(x=>x.id===id);return b&&b.org||'cash';}
 function cashAcc(cur){return cur===BASE?'301':'302';}
 /* Одна сторона проводки: рахунок, аналітика (an), валюта і сума у валюті */
+function lf(v,c){return (Math.round(v*100)/100).toLocaleString('uk-UA',{maximumFractionDigits:2})+' '+({UAH:'₴',USD:'$',EUR:'€'}[c]||c);}
 function side(acc,an,cur,amt){return {acc,an,cur:cur||BASE,amt:r2(amt)};}
 function ledger(ops,nowR,opR){
   const posts=[];
@@ -485,8 +486,9 @@ function ledger(ops,nowR,opR){
         const a2=+o.amount2||0,u2=a2*opR(o.cur2,o.date);
         add(o,box(o.to,o.cur2,a2),box(o.from,o.cur,a),u);
         const d=r2(u2-u);
-        if(d>0)add(o,box(o.to,o.cur2,0),side('714','',BASE,d),d,'Курсова різниця при обміні');
-        else if(d<0)add(o,side('945','',BASE,-d),box(o.to,o.cur2,0),-d,'Курсова різниця при обміні');
+        const nt=`Курсова різниця при обміні: отримали ${lf(a2,o.cur2)} = ${lf(r2(u2),BASE)}, віддали ${lf(a,o.cur)} = ${lf(r2(u),BASE)}`;
+        if(d>0)add(o,box(o.to,o.cur2,0),side('714','exch',BASE,d),d,nt);
+        else if(d<0)add(o,side('945','exch',BASE,-d),box(o.to,o.cur2,0),-d,nt);
         break;}
     }
   }
@@ -500,8 +502,10 @@ function ledger(ops,nowR,opR){
     const x=bal[key],r=nowR(x.s.cur);if(!r)continue;
     const d=r2(r2(x.amt)*r-x.u);if(Math.abs(d)<0.005)continue;
     const o={date:rd,ts:Infinity,payVia:null,from:null,to:null};
-    const s=side(x.s.acc,x.s.an,x.s.cur,0);const note='Переоцінка '+x.s.cur+' за курсом '+(Math.round(r*100)/100);
-    const p=d>0?{dt:s,kt:side('714','',BASE,d)}:{dt:side('945','',BASE,-d),kt:s};
+    const s=side(x.s.acc,x.s.an,x.s.cur,0);const am=r2(x.amt);
+    const note=`Переоцінка ${lf(am,x.s.cur)}: за курсом ${Math.round(r*100)/100} це ${lf(r2(am*r),BASE)}, в обліку було ${lf(r2(x.u),BASE)}`;
+    const fa='rev:'+x.s.acc+'~'+x.s.an;
+    const p=d>0?{dt:s,kt:side('714',fa,BASE,d)}:{dt:side('945',fa,BASE,-d),kt:s};
     posts.push({date:rd,ts:Infinity,opId:null,day:null,dt:p.dt,kt:p.kt,sum:Math.abs(d),org:x.org,note,reval:true});
   }
   return {posts};
@@ -535,7 +539,7 @@ let authState='loading',ownerUid=null,ownerLoaded=false,rolesSub=null;
 let baseWrite=true,isOwner=false,roles={},rolesLoaded=false,members={};
 let audit=[],auditSeen=0,auditLoaded=false;const auditBy={},auditSubs={};
 ui.audit={all:false,limit:150};
-ui.acc={month:thisMonth(),org:'',acc:'',an:''};
+ui.acc={month:thisMonth(),org:'',acc:'',an:'',only:''};
 
 /* ---------- helpers ---------- */
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -631,7 +635,8 @@ function perevirkaBody(M){
     rows+=`<tr class="${good?'':'badrow'}"><td>${good?'✅':'❌'} ${esc(x.label)}</td><td>${f(x.value)}</td><td>${f(a)}</td></tr>`;
   }
   const n=ETA.EXPECTED.length,all=ok===n;
-  return `<div class="card chk-sum ${all?'good':'badc'}"><b>${all?'✅ Усе збігається з еталоном':'❌ Є розбіжності з еталоном'}</b><div class="small">${ok} з ${n} показників правильні</div></div>
+  const stale=ETA.ETALON_VER&&(cfg&&cfg.etalonVer||1)<ETA.ETALON_VER;
+  return (stale?`<div class="warn-card"><b>Еталон оновився.</b> У тестовій базі ще старі еталонні дані, тому частина рядків червона. Натисніть «Скинути до еталону» вгорі.</div>`:'')+`<div class="card chk-sum ${all?'good':'badc'}"><b>${all?'✅ Усе збігається з еталоном':'❌ Є розбіжності з еталоном'}</b><div class="small">${ok} з ${n} показників правильні</div></div>
   <div class="legend" style="margin-bottom:10px">Якщо ви вносили свої тестові операції, розбіжності — це нормально. Натисніть «Скинути до еталону» вгорі, і все має знову стати зеленим.</div>
   <div class="tbl-wrap"><table><thead><tr><th>Показник</th><th>Очікується</th><th>Є</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -663,7 +668,8 @@ function panelBody(M){
   const c=C();
   if(!c.boxes.length)return `<div class="empty-state"><b>Ще немає жодної каси.</b><br>${canAdmin?'Додайте каси в налаштуваннях (шестерня вгорі).':'Власник ще не налаштував каси.'}</div>`;
   const m=thisMonth();const mm=M.months[m]||{inc:0,exp:0,oz:0};const plM=r2(mm.inc-mm.exp-mm.oz);
-  let h=dispToggle()+`<section class="hero"><div class="lbl">Баланс</div><div class="num">${fmtD(M.balance)}</div>
+  const g=(only,mo)=>`data-act="accgo" data-v="${esc('||'+(mo||'')+'|'+only)}"`;
+  let h=dispToggle()+`<section class="hero click" ${g('','')}><div class="lbl">Баланс ›</div><div class="num">${fmtD(M.balance)}</div>
     <div class="sub">= у касах + мені винні − я винен</div></section>`;
   h+=`<div class="tiles">
     <button type="button" class="tile" data-act="go" data-v="kasy"><span class="l">У касах</span><span class="v">${fmtD(M.cashU)}</span><span class="go">Каси →</span></button>
@@ -671,9 +677,9 @@ function panelBody(M){
     <button type="button" class="tile" data-act="go" data-v="kliienty"><span class="l">Я винен</span><span class="v neg">${fmtD(-M.iOwe)}</span><span class="go">Клієнти →</span></button>
   </div>`;
   h+=`<h2>Результат</h2><div class="stats" style="margin-top:0">
-    <div class="stat"><div class="l">P&amp;L за ${esc(monthLabel(m).split(' ')[0].toLowerCase())}</div><div class="v ${sgn(plM)}">${fmtD(plM,true)}</div></div>
-    <div class="stat"><div class="l">P&amp;L з початку</div><div class="v ${sgn(M.plAll)}">${fmtD(M.plAll,true)}</div></div>
-    <div class="stat"><div class="l">Курсова різниця</div><div class="v ${sgn(M.fxDiff)}">${fmtD(M.fxDiff,true)}</div></div>
+    <div class="stat click" ${g('pl',m)}><div class="l">P&amp;L за ${esc(monthLabel(m).split(' ')[0].toLowerCase())} ›</div><div class="v ${sgn(plM)}">${fmtD(plM,true)}</div></div>
+    <div class="stat click" ${g('pl','')}><div class="l">P&amp;L з початку ›</div><div class="v ${sgn(M.plAll)}">${fmtD(M.plAll,true)}</div></div>
+    <div class="stat click" ${g('fx','')}><div class="l">Курсова різниця ›</div><div class="v ${sgn(M.fxDiff)}">${fmtD(M.fxDiff,true)}</div></div>
   </div>`;
   h+=`<div class="check">Баланс = P&amp;L з початку + курсова різниця. ${rateLine(M)}</div>`;
   h+=missingWarn(M);
@@ -684,7 +690,7 @@ function kasyBody(M){
   const c=C();
   if(!c.boxes.length)return `<div class="empty-state"><b>Ще немає жодної каси.</b><br>${canAdmin?'Додайте каси в налаштуваннях (шестерня вгорі).':'Власник ще не налаштував каси.'}</div>`;
   const cash=M.cash;const curs=sortCurs(Object.keys(cash).filter(k=>cash[k]!==0));
-  let h=dispToggle()+`<section class="hero"><div class="lbl">У касах</div><div class="num">${fmtD(M.cashU)}</div>
+  let h=dispToggle()+`<section class="hero click" data-act="accgo" data-v="|||cash"><div class="lbl">У касах ›</div><div class="num">${fmtD(M.cashU)}</div>
     <div class="sub">${curs.length?curs.map(k=>fmt(cash[k],k)).join(' · '):'каси порожні'}</div></section>`;
   h+=missingWarn(M);
   h+=`<h2>Каси</h2><div class="boxes">`;
@@ -738,7 +744,7 @@ function clientRowHtml(r){
 }
 function clientsBody(M){
   const rows=clientRows(M).filter(r=>!r.archived||Math.abs(r.u)>=0.5);
-  let h=dispToggle()+`<div class="duo"><div class="stat"><div class="l">Мені винні</div><div class="v pos">${fmtD(M.owedToMe)}</div><div class="bd">${curBreak(M.owedCur,1)}</div></div><div class="stat"><div class="l">Я винен</div><div class="v neg">${fmtD(-M.iOwe)}</div><div class="bd">${curBreak(M.oweCur,-1)}</div></div></div>`+rateNote(M);
+  let h=dispToggle()+`<div class="duo"><div class="stat click" data-act="accgo" data-v="|||cli"><div class="l">Мені винні ›</div><div class="v pos">${fmtD(M.owedToMe)}</div><div class="bd">${curBreak(M.owedCur,1)}</div></div><div class="stat click" data-act="accgo" data-v="|||cli"><div class="l">Я винен ›</div><div class="v neg">${fmtD(-M.iOwe)}</div><div class="bd">${curBreak(M.oweCur,-1)}</div></div></div>`+rateNote(M);
   h+=missingWarn(M);
   h+=rows.length?`<div class="clients">${rows.map(clientRowHtml).join('')}</div>`:`<div class="empty-state">Клієнтів ще немає.</div>`;
   if(canWrite)h+=`<div class="addrow"><input id="nc-name" placeholder="Новий клієнт, напр. Петро"><button class="btn" type="button" data-act="addclient">Додати</button></div>`;
@@ -850,14 +856,15 @@ function reportBody(M){
     const sorted=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]);
     const go=(acc,cat)=>`class="click" data-act="accgo" data-v="${esc(acc+'|cat:'+cat+'|'+(m||''))}"`;
     h+=`<h2>P&amp;L · ${esc(title)}</h2><div class="tbl-wrap"><table><tbody>`;
-    h+=`<tr class="sec"><td>Доходи</td><td>${fmtU(tInc)}</td></tr>`;
+    const gt=only=>`class="click" data-act="accgo" data-v="${esc('||'+(m||'')+'|'+only)}"`;
+    h+=`<tr class="sec click" data-act="accgo" data-v="${esc('||'+(m||'')+'|inc')}"><td>Доходи ›</td><td>${fmtU(tInc)}</td></tr>`;
     for(const [k,v] of sorted(inc))h+=`<tr ${go(incAcc(k),k)}><td class="ind">${esc(k)} ›</td><td>${fmtU(v)}</td></tr>`;
-    h+=`<tr class="sec"><td>Поточні витрати</td><td>${fmtU(tExp)}</td></tr>`;
+    h+=`<tr class="sec click" data-act="accgo" data-v="${esc('||'+(m||'')+'|exp')}"><td>Поточні витрати ›</td><td>${fmtU(tExp)}</td></tr>`;
     for(const [k,v] of sorted(exp))h+=`<tr ${go(expAcc(k),k)}><td class="ind">${esc(k)} ›</td><td>${fmtU(v)}</td></tr>`;
     h+=`<tr class="sec"><td>Основні засоби</td><td>${fmtU(tOz)}</td></tr>`;
     for(const {o,u} of oz)h+=`<tr class="click" data-act="opview" data-v="${esc(o.day+'|'+o.id)}"><td class="ind">${esc(o.assetName||'без назви')} ›</td><td>${fmtU(u)}</td></tr>`;
-    h+=`<tr class="total"><td>Результат (P&amp;L)</td><td class="${sgn(res)}">${fmtU(res,true)}</td></tr>`;
-    if(!m)h+=`<tr><td>Курсова різниця</td><td class="${sgn(M.fxDiff)}">${fmtU(M.fxDiff,true)}</td></tr><tr class="total"><td>Баланс</td><td class="${sgn(M.balance)}">${fmtU(M.balance)}</td></tr>`;
+    h+=`<tr class="total click" data-act="accgo" data-v="${esc('||'+(m||'')+'|pl')}"><td>Результат (P&amp;L) ›</td><td class="${sgn(res)}">${fmtU(res,true)}</td></tr>`;
+    if(!m)h+=`<tr ${gt('fx')}><td>Курсова різниця ›</td><td class="${sgn(M.fxDiff)}">${fmtU(M.fxDiff,true)}</td></tr><tr class="total click" data-act="accgo" data-v="||"><td>Баланс ›</td><td class="${sgn(M.balance)}">${fmtU(M.balance)}</td></tr>`;
     h+=`</tbody></table></div>`;
     const spent=tExp+tOz;
     if(spent>0){
@@ -888,8 +895,9 @@ function reportBody(M){
 /* ---------- Рахунки: ОСВ → рахунок → аналітика → проводки → операція ---------- */
 function fmtN(v){const x=r2(v);return x?Math.abs(x).toLocaleString('uk-UA',{minimumFractionDigits:Number.isInteger(x)?0:2,maximumFractionDigits:2}):'';}
 function fmtS(v){const x=r2(v);return x?fmtN(x)+(x>0?' Дт':' Кт'):'';}
-function anLabel(an){if(!an)return '—';const i=an.indexOf(':');const k=an.slice(0,i),v=an.slice(i+1);return k==='box'?boxName(v):k==='cli'?clientName(v):v;}
+function anLabel(an){if(!an)return '—';if(an==='exch')return 'Обмін валют';if(an.startsWith('rev:')){const [acc,inner]=an.slice(4).split('~');return 'Переоцінка: '+anLabel(inner)+' ('+acc+')';}const i=an.indexOf(':');const k=an.slice(0,i),v=an.slice(i+1);return k==='box'?boxName(v):k==='cli'?clientName(v):v;}
 function accName(a){return ACC[a]?ACC[a][0]:a;}
+const ACC_ONLY={pl:['P&L: доходи і витрати (без курсової різниці)',k=>/^[79]/.test(k)&&k!=='714'&&k!=='945'],inc:['Доходи',k=>/^7/.test(k)&&k!=='714'],exp:['Витрати',k=>/^9/.test(k)&&k!=='945'],fx:['Курсова різниця',k=>k==='714'||k==='945'],cash:['У касах',k=>k==='301'||k==='302'],cli:['Розрахунки з клієнтами',k=>Object.values(CLIENT_KINDS).some(x=>x[1]===k)]};
 function accPeriod(){const m=ui.acc.month;return m?[m+'-01',m+'-31']:['',''];}
 function accHead(){
   const a=ui.acc,m=a.month;
@@ -905,19 +913,23 @@ function accBody(M){
   const cells=x=>`<td>${fmtN(x.dt)}</td><td>${fmtN(x.kt)}</td><td><b>${fmtS(x.close)}</b></td>`;
   let h=missingWarn(M);
   if(!a.acc){
-    const O=osv(M.posts,from,to,a.org,'');const codes=Object.keys(O).filter(k=>O[k].open||O[k].dt||O[k].kt).sort((x,y)=>ACC_ORDER.indexOf(x)-ACC_ORDER.indexOf(y));
+    const only=ACC_ONLY[a.only];
+    if(only)h+=`<div class="crumbs"><button type="button" data-act="accopen" data-v="">Усі рахунки</button> › <b>${esc(only[0])}</b></div>`;
+    const O=osv(M.posts,from,to,a.org,'');const codes=Object.keys(O).filter(k=>(O[k].open||O[k].dt||O[k].kt)&&(!only||only[1](k))).sort((x,y)=>ACC_ORDER.indexOf(x)-ACC_ORDER.indexOf(y));
     if(!codes.length)return h+`<div class="empty-state">За цей період проводок немає.</div>`;
     let t={open:0,dt:0,kt:0,close:0},rows='',sec='';
     for(const k of codes){const x=O[k];const s=(ACC[k]||['','a'])[1];
       if(s!==sec){sec=s;rows+=`<tr class="sec"><td colspan="4">${esc(ACC_SEC[s])}</td></tr>`;}
       rows+=`<tr class="click" data-act="accopen" data-v="${esc(k)}"><td><span class="code">${esc(k)}</span> ›<span class="an">${esc(accName(k))}</span>${opn(x)}</td>${cells(x)}</tr>`;
       t.dt+=x.dt;t.kt+=x.kt;}
+    if(only){let tc=0;for(const k of codes)tc+=O[k].close;h+=`<div class="card" style="margin-bottom:10px"><b>${esc(only[0])} · ${esc(per)}: ${fmtU(a.only==='pl'||a.only==='inc'||a.only==='fx'?-tc:tc,a.only!=='cash'&&a.only!=='exp')}</b><div class="small muted">${a.only==='pl'||a.only==='fx'?'Доходи (кредит) мінус витрати (дебет). ':''}Натисніть рахунок, щоб розкрити.</div></div>`;}
     const ok=Math.abs(r2(t.dt-t.kt))<0.01;
     h+=`<h2>Оборотно-сальдова відомість · ${esc(per)}</h2><div class="tbl-wrap"><table class="osv"><thead>${head}</thead><tbody>${rows}<tr class="total"><td>Разом</td><td>${fmtN(t.dt)}</td><td>${fmtN(t.kt)}</td><td></td></tr></tbody></table></div>`;
-    h+=`<div class="okline">${ok?'✅ Дебет = Кредит: усе сходиться.':'❌ Дебет ≠ Кредит — помилка в розрахунках, напишіть Claude.'} Дт — дебетове сальдо (актив, витрата), Кт — кредитове (борг, дохід). Натисніть рахунок, щоб розкрити.</div>`;
+    if(!only)h+=`<div class="okline">${ok?'✅ Дебет = Кредит: усе сходиться.':'❌ Дебет ≠ Кредит — помилка в розрахунках, напишіть Claude.'} Дт — дебетове сальдо (актив, витрата), Кт — кредитове (борг, дохід). Натисніть рахунок, щоб розкрити.</div>`;
     return h;
   }
   const crumbs=[`<button type="button" data-act="accopen" data-v="">Усі рахунки</button>`];
+  if(ACC_ONLY[a.only])crumbs.push(`<button type="button" data-act="acconly" data-v="${esc(a.only)}">${esc(ACC_ONLY[a.only][0])}</button>`);
   if(!a.an){
     const O=osv(M.posts,from,to,a.org,a.acc);const ks=Object.keys(O).filter(k=>O[k].open||O[k].dt||O[k].kt).sort((x,y)=>Math.abs(O[y].close)-Math.abs(O[x].close));
     h+=`<div class="crumbs">${crumbs.join(' › ')} › <b>${esc(a.acc)} ${esc(accName(a.acc))}</b></div>`;
@@ -1287,8 +1299,9 @@ document.addEventListener('click',async e=>{
     case 'migrate':{const f=document.getElementById('mig-file');if(!f||!f.files||!f.files[0]){const st=document.getElementById('mig-status');if(st)st.textContent='Спочатку оберіть файл.';return;}el.disabled=true;await importData(f.files[0]);el.disabled=false;break;}
     case 'claimempty':el.disabled=true;await claimEmpty();break;
     case 'goaudit':location.hash='#zminy';break;
-    case 'accgo':{const [acc,an,m]=v.split('|');ui.acc={month:m||'',org:'',acc:acc||'',an:an||''};if(ui.tab==='rakhunky')render(true);else location.hash='#rakhunky';break;}
-    case 'accopen':ui.acc.acc=v;ui.acc.an='';render();window.scrollTo(0,0);break;
+    case 'accgo':{const [acc,an,m,only]=v.split('|');ui.acc={month:m||'',org:'',acc:acc||'',an:an||'',only:only||''};if(ui.tab==='rakhunky')render(true);else location.hash='#rakhunky';break;}
+    case 'accopen':ui.acc.acc=v;ui.acc.an='';if(!v)ui.acc.only='';render();window.scrollTo(0,0);break;
+    case 'acconly':ui.acc.acc='';ui.acc.an='';ui.acc.only=v;render();window.scrollTo(0,0);break;
     case 'anopen':ui.acc.an=v;render();window.scrollTo(0,0);break;
     case 'ap':ui.acc.month=v==='month'?thisMonth():'';render(true);break;
     case 'aufilter':ui.audit.all=v==='all';render(true);break;
