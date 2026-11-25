@@ -305,7 +305,7 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 11</div>
+<div class="ver" id="ver">версія 12</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -458,7 +458,10 @@ const CLIENT_KINDS={other:['Інший','377'],investor:['Інвестор','60'
 const ORGS=[['cash','Готівка'],['tov','ТОВ «БАЗА СЕРВІС»'],['fop3','ФОП 3 група'],['fop2','ФОП 2 група']];
 const OZ_CAT='Основні засоби';
 function acctCfg(){return C().acct||{};}
-function clientKind(id){const k=(acctCfg().clients||{})[id];return CLIENT_KINDS[k]?k:'other';}
+function clientKind(id){const k=(acctCfg().clients||{})[id];if(CLIENT_KINDS[k])return k;
+  /* Без налаштування — за назвою: «інвестор…» → Інвестор, «банк…» → Банк */
+  const n=String((clients[id]&&clients[id].name)||(C().legacyNames||{})[id]||'').toLowerCase();
+  return /інвестор/.test(n)?'investor':/банк/.test(n)?'bank':'other';}
 function clientAcc(id){return CLIENT_KINDS[clientKind(id)][1];}
 function expAcc(cat){const m=(acctCfg().exp||{})[cat];return ACC[m]?m:(cat===OZ_CAT||cat==='Інше'?'949':'91');}
 function incAcc(cat){const m=(acctCfg().inc||{})[cat];return ACC[m]?m:'719';}
@@ -615,13 +618,41 @@ function cashierBody(M){
   h+=`<h2>Мої операції</h2>`+journalBody(M);ui.f=saved;
   return h;
 }
-let promoteAsk=false;
+let promoteAsk=false,promoteMsg='',promoteDone=false;
+const GH_API='https://api.github.com/repos/BazaService/bazaservice.github.io/actions/workflows/promote.yml';
+function ghToken(){try{return localStorage.getItem('bs.ghtoken')||'';}catch(e){return '';}}
+async function ghFetch(path,opt){return fetch(GH_API+path,Object.assign({headers:{Authorization:'Bearer '+ghToken(),Accept:'application/vnd.github+json'}},opt||{}));}
+function promoteSay(m,done){promoteMsg=m;promoteDone=!!done;renderTestBar();}
+async function runPromote(){
+  promoteAsk='run';promoteSay('⏳ Запускаю перенесення…');
+  const since=Date.now()-60000;
+  try{
+    const r=await ghFetch('/dispatches',{method:'POST',body:JSON.stringify({ref:'main'})});
+    if(r.status===401||r.status===403||r.status===404){try{localStorage.removeItem('bs.ghtoken');}catch(e){}return promoteSay('❌ GitHub не прийняв ключ (можливо, він закінчився). Натисніть «Перенести в робочу» ще раз і вставте новий ключ.',true);}
+    if(!r.ok)return promoteSay('❌ GitHub відповів помилкою '+r.status+'. Спробуйте ще раз за хвилину.',true);
+    for(let i=0;i<60;i++){
+      await new Promise(f=>setTimeout(f,5000));
+      const q=await ghFetch('/runs?per_page=1&event=workflow_dispatch');if(!q.ok)continue;
+      const run=((await q.json()).workflow_runs||[])[0];
+      if(!run||Date.parse(run.created_at)<since){promoteSay('⏳ Чекаю, поки GitHub почне…');continue;}
+      if(run.status!=='completed'){promoteSay('⏳ Перевіряю еталон і переношу… (зазвичай до хвилини)');continue;}
+      if(run.conclusion==='success')return promoteSay('✅ Перенесено. Через 1–2 хвилини відкрийте робочий застосунок, закрийте і відкрийте ще раз.',true);
+      return promoteSay('❌ Не перенесено: перевірка еталоном не пройшла або сталася помилка. Робоча версія не змінилась. Напишіть Claude.',true);
+    }
+    promoteSay('⏳ GitHub довго відповідає. Перевірте пізніше через «Деталі».',true);
+  }catch(e){promoteSay('❌ Немає зв\'язку з GitHub. Перевірте інтернет і спробуйте ще раз.',true);}
+}
 function renderTestBar(){
   const el=document.getElementById('testbar');if(!el||!IS_TEST)return;
   el.hidden=false;
   const owner=isOwner&&authState==='in'&&db;
-  el.innerHTML=promoteAsk
-    ?`<span><b>Перенести цю версію в робочу?</b> GitHub спершу перевірить еталон, потім перенесе програму. Ваші дані не змінюються. На сторінці, що відкриється, натисніть <b>Run workflow</b> → зелене <b>Run workflow</b>.</span><span class="tb-btns"><a class="tb-link" href="https://github.com/BazaService/bazaservice.github.io/actions/workflows/promote.yml" target="_blank" rel="noopener" data-act="promotego">Відкрити GitHub</a><button type="button" data-act="promote0">Скасувати</button></span>`
+  const GH='https://github.com/BazaService/bazaservice.github.io/actions/workflows/promote.yml';
+  el.innerHTML=promoteAsk==='setup'
+    ?`<span><b>Один раз на цьому телефоні:</b> потрібен ключ GitHub, щоб кнопка могла запускати перенесення. Як його зробити — у Claude. Вставте ключ сюди (він зберігається тільки на цьому телефоні):</span><span class="tb-btns" style="width:100%"><input id="gh-token" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;min-width:0;font-size:16px;padding:6px 8px;border-radius:8px;border:0"><button type="button" data-act="ghsave">Зберегти</button><button type="button" data-act="promote0">Скасувати</button></span>`
+    :promoteAsk==='confirm'
+    ?`<span><b>Перенести цю версію в робочу?</b> Спершу автоматична перевірка еталоном, потім перенесення. Ваші дані не змінюються.</span><span class="tb-btns"><button type="button" data-act="promote2">Так, перенести</button><button type="button" data-act="promote0">Ні</button></span>`
+    :promoteAsk==='run'
+    ?`<span>${promoteMsg}</span><span class="tb-btns">${promoteDone?'<button type="button" data-act="promote0">Закрити</button>':''}<a class="tb-link" href="${GH}" target="_blank" rel="noopener">Деталі</a></span>`
     :resetAsk
     ?`<span><b>Скинути тестову базу до еталону?</b> Усі тестові операції буде видалено.</span><span class="tb-btns"><button type="button" data-act="reset2" ${resetBusy?'disabled':''}>${resetBusy?'Скидаю…':'Так, скинути'}</button><button type="button" data-act="reset0">Ні</button></span>`
     :`<span><b>ТЕСТОВА ВЕРСІЯ</b> · справжні дані не чіпаються</span><span class="tb-btns"><button type="button" data-act="go" data-v="perevirka">Перевірка</button>${owner?'<button type="button" data-act="reset1">Скинути до еталону</button><button type="button" data-act="promote1">Перенести в робочу</button>':''}</span>`;
@@ -1301,9 +1332,10 @@ document.addEventListener('click',async e=>{
     case 'logout':clearSnap();if(!FB.auth){location.reload();break;}signOut(FB.auth).then(()=>location.reload());break;
     case 'migrate':{const f=document.getElementById('mig-file');if(!f||!f.files||!f.files[0]){const st=document.getElementById('mig-status');if(st)st.textContent='Спочатку оберіть файл.';return;}el.disabled=true;await importData(f.files[0]);el.disabled=false;break;}
     case 'claimempty':el.disabled=true;await claimEmpty();break;
-    case 'promote1':promoteAsk=true;resetAsk=false;renderTestBar();break;
+    case 'promote1':resetAsk=false;promoteAsk=ghToken()?'confirm':'setup';renderTestBar();break;
     case 'promote0':promoteAsk=false;renderTestBar();break;
-    case 'promotego':setTimeout(()=>{promoteAsk=false;renderTestBar();},800);break;
+    case 'promote2':runPromote();break;
+    case 'ghsave':{const t=(document.getElementById('gh-token').value||'').trim();if(!/^(github_pat_|ghp_)/.test(t)){toast('Це не схоже на ключ GitHub');break;}try{localStorage.setItem('bs.ghtoken',t);}catch(e){}promoteAsk='confirm';renderTestBar();break;}
     case 'goaudit':location.hash='#zminy';break;
     case 'accgo':{const [acc,an,m,only]=v.split('|');ui.acc={month:m||'',org:'',acc:acc||'',an:an||'',only:only||''};if(ui.tab==='rakhunky')render(true);else location.hash='#rakhunky';break;}
     case 'accopen':ui.acc.acc=v;ui.acc.an='';if(!v)ui.acc.only='';render();window.scrollTo(0,0);break;
