@@ -98,6 +98,7 @@ td.ind{padding-left:22px}
 tr.click{cursor:pointer}.stat.click,.hero.click{cursor:pointer}.stat.click:active,.hero.click:active{opacity:.75}tr.click:active td{background:var(--surface-2)}
 td .an{display:block;font-size:12px;color:var(--muted);font-weight:400}
 td.code{font-weight:800}
+.fxn{display:block;font-size:12.5px;line-height:1.4;margin:4px 0 2px;font-weight:400}.fxl{display:block;margin-top:5px}.fxr{font-weight:700}
 .acl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:8px;align-items:center;margin:6px 0}.acl span{font-size:14px;overflow-wrap:anywhere}.acl select{width:100%;min-width:0}.acc-sub{display:block;margin:14px 0 4px}
 table.osv{font-size:13px}table.osv th,table.osv td{padding:8px 6px}table.osv th:first-child,table.osv td:first-child{padding-left:10px}table.osv th:last-child,table.osv td:last-child{padding-right:10px}
 .crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0 10px;font-size:14px}
@@ -305,7 +306,7 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 12</div>
+<div class="ver" id="ver">версія 14</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -470,46 +471,113 @@ function cashAcc(cur){return cur===BASE?'301':'302';}
 /* Одна сторона проводки: рахунок, аналітика (an), валюта і сума у валюті */
 function lf(v,c){return (Math.round(v*100)/100).toLocaleString('uk-UA',{maximumFractionDigits:2})+' '+({UAH:'₴',USD:'$',EUR:'€'}[c]||c);}
 function side(acc,an,cur,amt){return {acc,an,cur:cur||BASE,amt:r2(amt)};}
+/* Назви для пояснень (у LOGIC немає доступу до функцій інтерфейсу) */
+function lbBox(id){const b=C().boxes.find(x=>x.id===id);return b?b.name:'каса';}
+function lbCli(id){return (clients[id]&&clients[id].name)||(C().legacyNames||{})[id]||'клієнт';}
+function ldm(d){return d?d.slice(8,10)+'.'+d.slice(5,7):'';}
+function lr(r){return (Math.round(r*10000)/10000).toLocaleString('uk-UA',{maximumFractionDigits:4});}
+/* Як операція називається в поясненні — так само, як у журналі */
+function opLabel(o){
+  const a=lf(+o.amount||0,o.cur);
+  switch(o.type){
+    case 'clientIn':return `Від клієнта «${lbCli(o.client)}» ${a} в «${lbBox(o.to)}»`;
+    case 'clientOut':return `Клієнту «${lbCli(o.client)}» ${a} з «${lbBox(o.from)}»`;
+    case 'transfer':return `Переказ ${a} з «${lbBox(o.from)}» в «${lbBox(o.to)}»`;
+    case 'exchange':return o.from===o.to?`Обмін ${a} → ${lf(+o.amount2||0,o.cur2)} в «${lbBox(o.to)}»`:`Обмін ${a} з «${lbBox(o.from)}» → ${lf(+o.amount2||0,o.cur2)} в «${lbBox(o.to)}»`;
+    case 'expense':return `Витрата «${o.isAsset?OZ_CAT:(o.category||'Інше')}» ${a}${o.payVia==='client'?' через «'+lbCli(o.client)+'»':' з «'+lbBox(o.from)+'»'}`;
+    case 'income':return `Дохід «${o.category||'Інший дохід'}» ${a}${o.payVia==='client'?' через «'+lbCli(o.client)+'»':' в «'+lbBox(o.to)+'»'}`;
+  }
+  return o.type;
+}
+/* Проводки. Валюта рахується партіями (FIFO): кожна партія пам'ятає, звідки прийшла і за яким курсом.
+   Перший прийшов — перший пішов. Перекази між касами переносять партії з їхнім курсом.
+   Курсова різниця з'являється, коли валюта йде за іншою вартістю, ніж прийшла (714 / 945),
+   і в кінці — переоцінка того, що лишилось, за поточним курсом. Витрати і доходи — за курсом дня. */
 function ledger(ops,nowR,opR){
-  const posts=[];
-  const add=(o,dt,kt,sum,note)=>{sum=r2(sum);if(!sum)return;posts.push({date:o.date,ts:o.ts||0,opId:o.id||null,day:o.day||null,dt,kt,sum,org:o.payVia==='client'?'cash':boxOrg(o.from||o.to),note:note||''});};
+  const posts=[],pos={};
+  const P=(s,org)=>{const k=s.acc+'|'+s.an+'|'+s.cur+'|'+org;return pos[k]=pos[k]||{s,org,lots:[]};};
+  const qty=x=>x.lots.reduce((t,l)=>t+l.q,0);
+  /* Рух k (+1 дебет, −1 кредит) на a одиниць валюти: спершу гасимо партії протилежного знаку */
+  function consume(x,k,a){
+    const used=[];let left=a,cost=0;
+    while(left>1e-9&&x.lots.length&&Math.sign(x.lots[0].q)===-k){
+      const l=x.lots[0],take=Math.min(Math.abs(l.q),left);
+      used.push({q:take,r:l.r,src:l.src});cost+=take*l.r;left-=take;l.q+=k*take;
+      if(Math.abs(l.q)<1e-9)x.lots.shift();
+    }
+    return {used,cost:r2(cost),rem:r2(left)};
+  }
+  const push=(o,dt,kt,sum,note,extra)=>{sum=r2(sum);if(!sum)return;posts.push(Object.assign({date:o.date,ts:o.ts||0,opId:o.id||null,day:o.day||null,dt,kt,sum,org:o.payVia==='client'?'cash':boxOrg(o.from||o.to),note:note||''},extra||{}));};
   const box=(id,cur,a)=>side(cashAcc(cur),'box:'+id,cur,a);
   const cli=(id,cur,a)=>side(clientAcc(id),'cli:'+id,cur,a);
+  const lotLines=(used,cur)=>used.map(l=>`${l.src} — з них ${lf(r2(l.q),cur)} по ${lr(l.r)} = ${lf(r2(l.q*l.r),BASE)}`);
   for(const o of ops){
-    const a=+o.amount||0,u=a*opR(o.cur,o.date);
+    const a=+o.amount||0,day=opR(o.cur,o.date),u=a*day;
     const cat=o.type==='expense'&&o.isAsset?OZ_CAT:(o.category||(o.type==='income'?'Інший дохід':'Інше'));
     const exp=side(expAcc(cat),'cat:'+cat,BASE,u),inc=side(incAcc(cat),'cat:'+cat,BASE,u);
+    let dt,kt,a2=a,cur2=o.cur;
     switch(o.type){
-      case 'expense':add(o,exp,o.payVia==='client'?cli(o.client,o.cur,a):box(o.from,o.cur,a),u);break;
-      case 'income':add(o,o.payVia==='client'?cli(o.client,o.cur,a):box(o.to,o.cur,a),inc,u);break;
-      case 'clientIn':add(o,box(o.to,o.cur,a),cli(o.client,o.cur,a),u);break;
-      case 'clientOut':add(o,cli(o.client,o.cur,a),box(o.from,o.cur,a),u);break;
-      case 'transfer':add(o,box(o.to,o.cur,a),box(o.from,o.cur,a),u);break;
-      case 'exchange':{
-        const a2=+o.amount2||0,u2=a2*opR(o.cur2,o.date);
-        add(o,box(o.to,o.cur2,a2),box(o.from,o.cur,a),u);
-        const d=r2(u2-u);
-        const nt=`Курсова різниця при обміні: отримали ${lf(a2,o.cur2)} = ${lf(r2(u2),BASE)}, віддали ${lf(a,o.cur)} = ${lf(r2(u),BASE)}`;
-        if(d>0)add(o,box(o.to,o.cur2,0),side('714','exch',BASE,d),d,nt);
-        else if(d<0)add(o,side('945','exch',BASE,-d),box(o.to,o.cur2,0),-d,nt);
-        break;}
+      case 'expense':dt=exp;kt=o.payVia==='client'?cli(o.client,o.cur,a):box(o.from,o.cur,a);break;
+      case 'income':dt=o.payVia==='client'?cli(o.client,o.cur,a):box(o.to,o.cur,a);kt=inc;break;
+      case 'clientIn':dt=box(o.to,o.cur,a);kt=cli(o.client,o.cur,a);break;
+      case 'clientOut':dt=cli(o.client,o.cur,a);kt=box(o.from,o.cur,a);break;
+      case 'transfer':dt=box(o.to,o.cur,a);kt=box(o.from,o.cur,a);break;
+      case 'exchange':a2=+o.amount2||0;cur2=o.cur2;dt=box(o.to,o.cur2,a2);kt=box(o.from,o.cur,a);break;
+      default:continue;
+    }
+    const org=o.payVia==='client'?'cash':boxOrg(o.from||o.to);
+    const src=ldm(o.date)+' '+opLabel(o);
+    /* Вартість кожної сторони в гривні */
+    const val=(s,k)=>{
+      if(/^[79]/.test(s.acc)||s.cur===BASE)return {fixed:true,v:s.cur===BASE&&!/^[79]/.test(s.acc)?s.amt:r2(u),used:[],rem:0};
+      const c=consume(P(s,org),k,s.amt);return {fixed:!c.rem,v:c.cost,used:c.used,rem:c.rem,x:P(s,org)};
+    };
+    const D=val(dt,1),K=val(kt,-1);
+    const rate2=o.type==='exchange'?opR(cur2,o.date):day;
+    /* Невизначена частина (нова партія) бере вартість іншої сторони, а якщо й та невизначена — курс дня */
+    let vD=D.v,vK=K.v;
+    if(!D.fixed&&K.fixed)vD=r2(K.v);
+    else if(D.fixed&&!K.fixed)vK=r2(D.v);
+    else if(!D.fixed&&!K.fixed){vD=r2(D.v+D.rem*(dt.cur===o.cur?day:rate2));vK=r2(K.v+K.rem*day);}
+    const addLots=(S,side_,k,total)=>{if(!S.rem)return;const part=r2(total-S.v);
+      /* Переказ: партії переходять зі своїм курсом і походженням */
+      if(o.type==='transfer'&&S===D&&K.fixed&&K.used.length&&S.rem===a){for(const l of K.used)S.x.lots.push({q:k*l.q,r:l.r,src:l.src});return;}
+      S.x.lots.push({q:k*S.rem,r:S.rem?part/S.rem:0,src});};
+    addLots(D,dt,1,vD);addLots(K,kt,-1,vK);
+    push(o,dt,kt,vK,'');
+    const d=r2(vD-vK);
+    if(d){
+      const fxs=D.used.length?dt:kt,cur=fxs.cur;
+      const lines=[];
+      if(K.used.length)lines.push(...lotLines(K.used,kt.cur));
+      if(D.used.length)lines.push(...lotLines(D.used,dt.cur));
+      lines.push(`${ldm(o.date)} ${opLabel(o)}: ${o.type==='exchange'?'курс обміну '+lr(cur2===BASE?a2/a:a/a2):'курс дня '+lr(day)} = ${lf(r2(D.used.length&&K.used.length?vK:(D.used.length?vK:vD)),BASE)}`);
+      lines.push(`${d>0?'Виграли':'Втратили'} на курсі ${lf(Math.abs(d),BASE)}`);
+      const fa='fx:'+fxs.acc+'~'+fxs.an;
+      const z=side(dt.acc,dt.an,dt.cur,0);
+      if(d>0)push(o,z,side('714',fa,BASE,d),d,lines.join('\n'),{fx:true});
+      else push(o,side('945',fa,BASE,-d),z,-d,lines.join('\n'),{fx:true});
     }
   }
-  /* Переоцінка валюти за поточним курсом: різниця йде в 714 (плюс) або 945 (мінус) */
-  const bal={};
-  for(const p of posts)for(const [s,k] of [[p.dt,1],[p.kt,-1]]){if(s.cur===BASE)continue;const key=s.acc+'|'+s.an+'|'+s.cur+'|'+p.org;const x=bal[key]=bal[key]||{s,org:p.org,amt:0,u:0};x.amt+=k*s.amt;x.u+=k*p.sum;}
-  const last=ops.length?ops[ops.length-1].date:'';
+  /* Переоцінка залишків за поточним курсом */
   const t=new Date();const td=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
-  const rd=last>td?last:td;
-  for(const key of Object.keys(bal).sort()){
-    const x=bal[key],r=nowR(x.s.cur);if(!r)continue;
-    const d=r2(r2(x.amt)*r-x.u);if(Math.abs(d)<0.005)continue;
-    const o={date:rd,ts:Infinity,payVia:null,from:null,to:null};
-    const s=side(x.s.acc,x.s.an,x.s.cur,0);const am=r2(x.amt);
-    const note=`Переоцінка ${lf(am,x.s.cur)}: за курсом ${Math.round(r*100)/100} це ${lf(r2(am*r),BASE)}, в обліку було ${lf(r2(x.u),BASE)}`;
-    const fa='rev:'+x.s.acc+'~'+x.s.an;
+  const last=ops.length?ops[ops.length-1].date:'';const rd=last>td?last:td;
+  for(const key of Object.keys(pos).sort()){
+    const x=pos[key],r=nowR(x.s.cur);if(!r||!x.lots.length)continue;
+    const q=r2(qty(x));const book=r2(x.lots.reduce((t,l)=>t+l.q*l.r,0));const d=r2(q*r-book);
+    if(Math.abs(d)<0.005)continue;
+    const neg=q<0,cur=x.s.cur,isBox=x.s.an.startsWith('box:');
+    const ls=x.lots.slice(0,5).map(l=>`${l.src} — з них ${lf(r2(Math.abs(l.q)),cur)} по ${lr(l.r)}`);
+    if(x.lots.length>5)ls.push(`…і ще ${x.lots.length-5} партій`);
+    const up=r*Math.abs(q)>Math.abs(book);
+    const what=isBox?`У касі ${lf(Math.abs(q),cur)}`:neg?`Ми винні ${lf(Math.abs(q),cur)}`:`Клієнт винен нам ${lf(Math.abs(q),cur)}`;
+    const why=isBox?'':neg?` → наш борг у гривні ${up?'більший':'менший'}`:` → його борг у гривні ${up?'більший':'менший'}`;
+    const lines=[...ls,
+      `${what}: в обліку ${lf(Math.abs(book),BASE)}, за курсом зараз ${lr(r)} — ${lf(Math.abs(r2(q*r)),BASE)}`,
+      `Курс ${up?'виріс':'знизився'}${why} → ${d>0?'плюс':'мінус'} ${lf(Math.abs(d),BASE)}. Поки на папері: ${isBox?'валюта ще не продана':'борг ще не закритий'}`];
+    const s=side(x.s.acc,x.s.an,cur,0),fa='rev:'+x.s.acc+'~'+x.s.an;
     const p=d>0?{dt:s,kt:side('714',fa,BASE,d)}:{dt:side('945',fa,BASE,-d),kt:s};
-    posts.push({date:rd,ts:Infinity,opId:null,day:null,dt:p.dt,kt:p.kt,sum:Math.abs(d),org:x.org,note,reval:true});
+    posts.push({date:rd,ts:Infinity,opId:null,day:null,dt:p.dt,kt:p.kt,sum:Math.abs(d),org:x.org,note:lines.join('\n'),reval:true});
   }
   return {posts};
 }
@@ -929,7 +997,7 @@ function reportBody(M){
 /* ---------- Рахунки: ОСВ → рахунок → аналітика → проводки → операція ---------- */
 function fmtN(v){const x=r2(v);return x?Math.abs(x).toLocaleString('uk-UA',{minimumFractionDigits:Number.isInteger(x)?0:2,maximumFractionDigits:2}):'';}
 function fmtS(v){const x=r2(v);return x?fmtN(x)+(x>0?' Дт':' Кт'):'';}
-function anLabel(an){if(!an)return '—';if(an==='exch')return 'Обмін валют';if(an.startsWith('rev:')){const [acc,inner]=an.slice(4).split('~');return 'Переоцінка: '+anLabel(inner)+' ('+acc+')';}const i=an.indexOf(':');const k=an.slice(0,i),v=an.slice(i+1);return k==='box'?boxName(v):k==='cli'?clientName(v):v;}
+function anLabel(an){if(!an)return '—';if(an==='exch')return 'Обмін валют';if(an.startsWith('rev:')){const [acc,inner]=an.slice(4).split('~');return 'Переоцінка: '+anLabel(inner)+' ('+acc+')';}if(an.startsWith('fx:')){const [acc,inner]=an.slice(3).split('~');return 'Курсова різниця: '+anLabel(inner)+' ('+acc+')';}const i=an.indexOf(':');const k=an.slice(0,i),v=an.slice(i+1);return k==='box'?boxName(v):k==='cli'?clientName(v):v;}
 function accName(a){return ACC[a]?ACC[a][0]:a;}
 const ACC_ONLY={pl:['P&L: доходи і витрати (без курсової різниці)',k=>/^[79]/.test(k)&&k!=='714'&&k!=='945'],inc:['Доходи',k=>/^7/.test(k)&&k!=='714'],exp:['Витрати',k=>/^9/.test(k)&&k!=='945'],fx:['Курсова різниця',k=>k==='714'||k==='945'],cash:['У касах',k=>k==='301'||k==='302'],cli:['Розрахунки з клієнтами',k=>Object.values(CLIENT_KINDS).some(x=>x[1]===k)]};
 function accPeriod(){const m=ui.acc.month;return m?[m+'-01',m+'-31']:['',''];}
@@ -980,9 +1048,9 @@ function accBody(M){
   list.sort((x,y)=>x.date<y.date?1:x.date>y.date?-1:(y.ts||0)-(x.ts||0));
   let td=0,tk=0;
   const rows=list.map(p=>{const isDt=p.dt.acc===a.acc&&p.dt.an===a.an;const me_=isDt?p.dt:p.kt,other=isDt?p.kt:p.dt;
-    const o=p.opId&&findOp(p.day+'|'+p.opId);const title=o?opTitle(o)[0]:'';const cur=me_.cur!==BASE&&me_.amt?` · ${fmt(me_.amt,me_.cur)}`:'';
+    const o=p.opId&&findOp(p.day+'|'+p.opId);const title=o?opTitle(o)[0]:'';const cur=me_.cur!==BASE&&me_.amt?` · ${fmt(me_.amt,me_.cur)} за курсом ${(Math.round(p.sum/me_.amt*100)/100).toLocaleString('uk-UA')}`:'';
     if(isDt)td+=p.sum;else tk+=p.sum;
-    return `<tr${o?` class="click" data-act="opview" data-v="${esc(p.day+'|'+p.opId)}"`:''}><td>${shortDate(p.date).slice(0,5)} ${esc(p.note||title)}${o?' ›':''}<span class="an">кор. ${esc(other.acc)} ${esc(accName(other.acc))}${other.an?' · '+esc(anLabel(other.an)):''}${cur}${o&&o.comment?' · '+esc(o.comment):''}</span></td><td>${isDt?fmtN(p.sum):''}</td><td>${isDt?'':fmtN(p.sum)}</td></tr>`;}).join('');
+    return `<tr${o?` class="click" data-act="opview" data-v="${esc(p.day+'|'+p.opId)}"`:''}><td>${shortDate(p.date).slice(0,5)} ${p.reval?'<b>Переоцінка</b>':p.fx?'<b>Курсова різниця</b>':esc(p.note||title)}${o?' ›':''}${p.reval||p.fx?`<span class="fxn">${p.note.split('\n').map((l,i,A)=>`<span class="fxl${i===A.length-1?' fxr':''}">${esc(l)}</span>`).join('')}</span>`:''}<span class="an">кор. ${esc(other.acc)} ${esc(accName(other.acc))}${other.an?' · '+esc(anLabel(other.an)):''}${cur}${o&&o.comment?' · '+esc(o.comment):''}</span></td><td>${isDt?fmtN(p.sum):''}</td><td>${isDt?'':fmtN(p.sum)}</td></tr>`;}).join('');
   h+=`<div class="tbl-wrap"><table class="osv"><thead><tr><th>Проводка</th><th>Дебет</th><th>Кредит</th></tr></thead><tbody>${rows}<tr class="total"><td>Разом за ${esc(per)}</td><td>${fmtN(td)}</td><td>${fmtN(tk)}</td></tr></tbody></table></div>`;
   h+=`<div class="okline">Натисніть проводку, щоб відкрити операцію. «кор.» — рахунок, з яким пройшла проводка.</div>`;
   return h;
