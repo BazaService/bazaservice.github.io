@@ -1,0 +1,41 @@
+name: Перенести тестову версію в робочу
+
+# Запускає власник кнопкою «Перенести в робочу» в тестовій версії (відкриває цю сторінку → Run workflow).
+# Переноситься тільки програма (index.html, sw.js). Дані в базах не чіпаються.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Перевірка еталоном і перенесення
+        run: bash tools/promote.sh
+      - name: Опублікувати
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- index.html sw.js; then
+            echo "ℹ️ Робоча версія вже така сама, як тестова — переносити нічого."
+            exit 0
+          fi
+          V=$(grep -o 'версія [0-9]*' index.html | head -1)
+          git config user.name "Baza Service"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html sw.js
+          git commit -m "Перенесено тестову версію в робочу ($V)"
+          git push
+          gh api -X POST "repos/${{ github.repository }}/pages/builds" >/dev/null || echo "Сайт оновиться сам"
+          echo "✅ Готово: робоча версія — $V. Через 1–2 хвилини відкрийте застосунок двічі."

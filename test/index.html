@@ -272,7 +272,7 @@ nav.tabs a{position:relative}
 .ver{text-align:center;font-size:11px;color:var(--muted);padding:0 0 calc(80px + env(safe-area-inset-bottom,0px));opacity:.6}
 .testbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;background:var(--out);color:#fff;border-radius:12px;padding:8px 12px;margin-bottom:12px;font-size:13px}
 .testbar .tb-btns{display:flex;gap:6px;flex-wrap:wrap}
-.testbar button{border:1px solid rgba(255,255,255,.7);background:transparent;color:#fff;border-radius:8px;padding:6px 10px;font-weight:700;font-size:12px}
+.testbar button,.testbar .tb-link{border:1px solid rgba(255,255,255,.7);background:transparent;color:#fff;border-radius:8px;padding:6px 10px;font-weight:700;font-size:12px;text-decoration:none}.testbar .tb-link{background:#fff;color:var(--out)}
 .chk-sum{margin-bottom:10px}.chk-sum.good{background:var(--in-soft);color:var(--in);border-color:var(--in)}.chk-sum.badc{background:var(--out-soft);color:var(--out);border-color:var(--out)}
 tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 144px);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-weight:700;z-index:60;font-size:14px}
@@ -305,7 +305,7 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 10</div>
+<div class="ver" id="ver">версія 11</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -615,13 +615,16 @@ function cashierBody(M){
   h+=`<h2>Мої операції</h2>`+journalBody(M);ui.f=saved;
   return h;
 }
+let promoteAsk=false;
 function renderTestBar(){
   const el=document.getElementById('testbar');if(!el||!IS_TEST)return;
   el.hidden=false;
   const owner=isOwner&&authState==='in'&&db;
-  el.innerHTML=resetAsk
+  el.innerHTML=promoteAsk
+    ?`<span><b>Перенести цю версію в робочу?</b> GitHub спершу перевірить еталон, потім перенесе програму. Ваші дані не змінюються. На сторінці, що відкриється, натисніть <b>Run workflow</b> → зелене <b>Run workflow</b>.</span><span class="tb-btns"><a class="tb-link" href="https://github.com/BazaService/bazaservice.github.io/actions/workflows/promote.yml" target="_blank" rel="noopener" data-act="promotego">Відкрити GitHub</a><button type="button" data-act="promote0">Скасувати</button></span>`
+    :resetAsk
     ?`<span><b>Скинути тестову базу до еталону?</b> Усі тестові операції буде видалено.</span><span class="tb-btns"><button type="button" data-act="reset2" ${resetBusy?'disabled':''}>${resetBusy?'Скидаю…':'Так, скинути'}</button><button type="button" data-act="reset0">Ні</button></span>`
-    :`<span><b>ТЕСТОВА ВЕРСІЯ</b> · справжні дані не чіпаються</span><span class="tb-btns"><button type="button" data-act="go" data-v="perevirka">Перевірка</button>${owner?'<button type="button" data-act="reset1">Скинути до еталону</button>':''}</span>`;
+    :`<span><b>ТЕСТОВА ВЕРСІЯ</b> · справжні дані не чіпаються</span><span class="tb-btns"><button type="button" data-act="go" data-v="perevirka">Перевірка</button>${owner?'<button type="button" data-act="reset1">Скинути до еталону</button><button type="button" data-act="promote1">Перенести в робочу</button>':''}</span>`;
 }
 function perevirkaBody(M){
   if(!ETA){loadEta();return '<div class="empty-state">Завантажую еталон…</div>';}
@@ -1298,6 +1301,9 @@ document.addEventListener('click',async e=>{
     case 'logout':clearSnap();if(!FB.auth){location.reload();break;}signOut(FB.auth).then(()=>location.reload());break;
     case 'migrate':{const f=document.getElementById('mig-file');if(!f||!f.files||!f.files[0]){const st=document.getElementById('mig-status');if(st)st.textContent='Спочатку оберіть файл.';return;}el.disabled=true;await importData(f.files[0]);el.disabled=false;break;}
     case 'claimempty':el.disabled=true;await claimEmpty();break;
+    case 'promote1':promoteAsk=true;resetAsk=false;renderTestBar();break;
+    case 'promote0':promoteAsk=false;renderTestBar();break;
+    case 'promotego':setTimeout(()=>{promoteAsk=false;renderTestBar();},800);break;
     case 'goaudit':location.hash='#zminy';break;
     case 'accgo':{const [acc,an,m,only]=v.split('|');ui.acc={month:m||'',org:'',acc:acc||'',an:an||'',only:only||''};if(ui.tab==='rakhunky')render(true);else location.hash='#rakhunky';break;}
     case 'accopen':ui.acc.acc=v;ui.acc.an='';if(!v)ui.acc.only='';render();window.scrollTo(0,0);break;
