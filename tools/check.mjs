@@ -21,6 +21,19 @@ for (const x of EXPECTED) {
   if (!ok) bad++;
   console.log((ok ? '✅ ' : '❌ ') + x.label + ': очікується ' + x.value + ', є ' + a);
 }
+// Додатково: подвійний запис має сходитися за будь-якого курсу і будь-якого обміну.
+if (osv) {
+  const variants = [['курс 42', E2 => { E2.config.rates = { USD: 42 }; }],
+                    ['обмін дорожче + курс 38', E2 => { for (const d in E2.days) for (const id in E2.days[d]) { const o = E2.days[d][id]; if (o.type === 'exchange') o.amount2 = 4500; } E2.config.rates = { USD: 38 }; }]];
+  for (const [name, f] of variants) {
+    const E2 = etalonData(month); f(E2);
+    const R = run(E2), O = R.osv(R.M.posts, '', '', '', '');
+    let sum = 0, pl = 0; for (const k in O) { sum += O[k].close; if (/^[79]/.test(k) && k !== '714' && k !== '945') pl -= O[k].close; }
+    const fx = -((O['714'] ? O['714'].close : 0) + (O['945'] ? O['945'].close : 0));
+    const checks = [['сума сальдо = 0', sum, 0], ['курсова різниця = як на екрані «Гроші»', fx, R.M.fxDiff], ['P&L з рахунків = P&L з початку', pl, R.M.plAll]];
+    for (const [l, v, e] of checks) { const ok = Math.abs(v - e) < 0.01; if (!ok) bad++; console.log((ok ? '✅ ' : '❌ ') + `[${name}] ${l}: ${Math.round(v * 100) / 100} / ${e}`); }
+  }
+}
 if (skipped) console.log(`ℹ️ Пропущено ${skipped} показників по рахунках: у цій версії рахунків ще немає`);
 console.log(bad ? `\n❌ Помилок: ${bad} (${file})` : `\n✅ Усі ${EXPECTED.length - skipped} показників збігаються (${file})`);
 process.exit(bad ? 1 : 0);
