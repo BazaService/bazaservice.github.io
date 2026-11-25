@@ -1,6 +1,6 @@
 // Офлайн-режим: застосунок відкривається навіть без інтернету.
 const SCOPE = self.registration.scope;
-const V = 'bs-v8|' + SCOPE;
+const V = 'bs-v12|' + SCOPE;
 const CORE = ['./', './index.html', './firebase-config.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
