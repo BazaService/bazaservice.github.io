@@ -11,7 +11,7 @@ const month = '2026-11';
 const E = etalonData(month);
 const run = new Function('E', m[1] + `
   cfg = E.config; clients = E.clients; days = E.days;
-  return { M: model(), currentRate, osv: typeof osv === 'function' ? osv : null };`);
+  return { M: model(), currentRate, osv: typeof osv === 'function' ? osv : null, fxToday: typeof fxToday === 'function' ? fxToday : null };`);
 const { M, currentRate, osv } = run(E);
 let bad = 0, skipped = 0;
 for (const x of EXPECTED) {
@@ -30,7 +30,8 @@ if (osv) {
     const R = run(E2), O = R.osv(R.M.posts, '', '', '', '');
     let sum = 0, pl = 0; for (const k in O) { sum += O[k].close; if (/^[79]/.test(k) && k !== '714' && k !== '945') pl -= O[k].close; }
     const fx = -((O['714'] ? O['714'].close : 0) + (O['945'] ? O['945'].close : 0));
-    const checks = [['сума сальдо = 0', sum, 0], ['курсова різниця = як на екрані «Гроші»', fx, R.M.fxDiff], ['P&L з рахунків = P&L з початку', pl, R.M.plAll]];
+    const ft = R.fxToday ? R.fxToday(R.M.ops, R.M.nowR, R.M.opR).reduce((t, r) => t + r.v, 0) : R.M.fxDiff;
+    const checks = [['таблиця «з сьогоднішнім курсом» = курсова різниця', ft, R.M.fxDiff], ['сума сальдо = 0', sum, 0], ['курсова різниця = як на екрані «Гроші»', fx, R.M.fxDiff], ['P&L з рахунків = P&L з початку', pl, R.M.plAll]];
     for (const [l, v, e] of checks) { const ok = Math.abs(v - e) < 0.01; if (!ok) bad++; console.log((ok ? '✅ ' : '❌ ') + `[${name}] ${l}: ${Math.round(v * 100) / 100} / ${e}`); }
   }
 }
