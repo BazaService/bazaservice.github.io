@@ -299,14 +299,14 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
 </div>
 <button class="fab" id="fab" type="button" aria-label="Нова операція" data-act="new" hidden>+</button>
 <nav class="tabs" aria-label="Розділи"><div class="in">
-  <a href="#kasy" data-tab="kasy"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14.5h2"/></svg>Каси</a>
   <a href="#panel" data-tab="panel"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M14.8 9.3c-.5-.9-1.5-1.4-2.8-1.4-1.6 0-2.7.8-2.7 2s1 1.7 2.7 2.1 2.9.9 2.9 2.2-1.2 2.1-2.9 2.1c-1.4 0-2.5-.6-3-1.6M12 6.2v1.7M12 16.3V18"/></svg>Гроші</a>
+  <a href="#kasy" data-tab="kasy"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14.5h2"/></svg>Каси</a>
   <a href="#kliienty" data-tab="kliienty"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.6 3-5.5 6-5.5s5.4 1.9 6 5.5"/><path d="M16 5.2a3 3 0 0 1 0 5.6M18 14.8c1.7.7 2.7 2.4 3 5.2"/></svg>Клієнти</a>
   <a href="#zhurnal" data-tab="zhurnal"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>Журнал</a>
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 15</div>
+<div class="ver" id="ver">версія 16</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -628,7 +628,7 @@ function osv(posts,from,to,org,acc){
 let db=null,user=null,downloads=null,me={id:null},canWrite=true,canAdmin=false,noDb=false;
 let cfgLoaded=false,daysLoaded=false,clientsLoaded=false;
 const names={};
-const ui={tab:'kasy',eodDate:'',f:{from:'',to:'',box:'',client:'',type:'',cat:'',q:''},rep:{month:thisMonth()},dayLimit:30,openEod:new Set()};
+const ui={tab:'panel',eodDate:'',f:{from:'',to:'',box:'',client:'',type:'',cat:'',q:''},rep:{month:thisMonth()},dayLimit:30,openEod:new Set()};
 let form=null;
 let authState='loading',ownerUid=null,ownerLoaded=false,rolesSub=null;
 let baseWrite=true,isOwner=false,roles={},rolesLoaded=false,members={};
@@ -661,7 +661,7 @@ function sgn(v){return v>0.004?'pos':v<-0.004?'neg':'';}
 
 /* ---------- rendering ---------- */
 const IS_TEST=/^\/test(\/|$)/.test(location.pathname);
-const TABS=['kasy','panel','kliienty','zhurnal','zvit','zminy','rakhunky','nalashtuvannia','moia'].concat(IS_TEST?['perevirka']:[]);
+const TABS=['panel','kasy','kliienty','zhurnal','zvit','zminy','rakhunky','nalashtuvannia','moia'].concat(IS_TEST?['perevirka']:[]);
 let ETA=null,etaLoading=false,resetAsk=false,resetBusy=false;
 function loadEta(){if(ETA||etaLoading||!IS_TEST)return;etaLoading=true;import('./etalon.js').then(m=>{ETA=m;render();}).catch(()=>{etaLoading=false;});}
 function myRole(){if(isOwner)return 'owner';const r=me.id&&roles[me.id];return r&&r.role||'none';}
@@ -669,7 +669,7 @@ function myBox(){const r=me.id&&roles[me.id];return r&&r.box||'';}
 function isCashier(){return myRole()==='cashier';}
 function canEditOp(o){const r=myRole();return r==='owner'||((r==='full'||r==='cashier')&&!!o.by&&o.by===me.id);}
 function allowedTabs(){const r=myRole();return r==='owner'?TABS.filter(t=>t!=='moia'):(r==='full'||r==='viewer')?TABS.filter(t=>t!=='moia'&&t!=='nalashtuvannia'):r==='cashier'?['moia']:[];}
-function setTabFromHash(){const h=(location.hash||'').slice(1);ui.tab=TABS.includes(h)?h:'kasy';}
+function setTabFromHash(){const h=(location.hash||'').slice(1);ui.tab=TABS.includes(h)?h:'panel';}
 function render(full){
   document.querySelectorAll('nav.tabs a').forEach(a=>a.classList.toggle('on',a.dataset.tab===ui.tab||(a.dataset.tab==='zvit'&&(ui.tab==='zminy'||ui.tab==='rakhunky'))));
   const nb=newAuditCount();const bg=document.getElementById('badge');if(bg){bg.hidden=!nb;bg.textContent=nb>99?'99+':String(nb);}
