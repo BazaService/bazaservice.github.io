@@ -306,7 +306,7 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 17</div>
+<div class="ver" id="ver">версія 18</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -605,6 +605,25 @@ function fxToday(ops,nowR,opR){
   }
   return rows;
 }
+/* Контрольні суми: те саме, пораховане двома різними способами. Різниця завжди має бути 0.
+   Рахуються і на еталоні, і на справжніх даних. */
+function controlSums(M){
+  const O=osv(M.posts,'','','','');const b=a=>O[a]?O[a].close:0;
+  const cliAccs=[...new Set(Object.values(CLIENT_KINDS).map(x=>x[1]))];
+  let dt=0,kt=0,sum=0,pl=0;for(const k in O){dt+=O[k].dt;kt+=O[k].kt;sum+=O[k].close;if(/^[79]/.test(k)&&k!=='714'&&k!=='945')pl-=O[k].close;}
+  let ft=0;for(const r of fxToday(M.ops,M.nowR,M.opR))ft+=r.v;
+  const L=[
+    ['Каси на екрані − каси за рахунками 301 і 302',M.cashU-(b('301')+b('302'))],
+    ['Борги клієнтів на екрані − борги за рахунками клієнтів',(M.owedToMe-M.iOwe)-cliAccs.reduce((t,a)=>t+b(a),0)],
+    ['P&L на екрані − P&L за рахунками',M.plAll-pl],
+    ['Курсова різниця на екрані − за рахунками 714 і 945',M.fxDiff+(b('714')+b('945'))],
+    ['Курсова різниця на екрані − таблиця «з сьогоднішнім курсом»',M.fxDiff-ft],
+    ['Оборот Дебет − оборот Кредит',dt-kt],
+    ['Сума всіх сальдо',sum]
+  ];
+  for(const c in M.cash)if(c!==BASE){const a=O[cashAcc(c)];L.push([`Каси в ${c} на екрані − на рахунку 302`,M.cash[c]-(a&&a.cur[c]||0)]);}
+  return L.map(([label,v])=>({label,v:r2(v)}));
+}
 /* Оборотно-сальдова відомість. from/to — межі періоду (рядки YYYY-MM-DD, '' — без межі).
    by: 'acc' — по рахунках, або назва рахунку — по аналітиці цього рахунку.
    Сальдо: + дебетове, − кредитове. */
@@ -761,8 +780,9 @@ function perevirkaBody(M){
     rows+=`<tr class="${good?'':'badrow'}"><td>${good?'✅':'❌'} ${esc(x.label)}</td><td>${f(x.value)}</td><td>${f(a)}</td></tr>`;
   }
   const n=ETA.EXPECTED.length,all=ok===n;
+  const cs=controlSums(M),csOk=cs.every(x=>Math.abs(x.v)<0.01);
   const stale=ETA.ETALON_VER&&(cfg&&cfg.etalonVer||1)<ETA.ETALON_VER;
-  return (stale?`<div class="warn-card"><b>Еталон оновився.</b> У тестовій базі ще старі еталонні дані, тому частина рядків червона. Натисніть «Скинути до еталону» вгорі.</div>`:'')+`<div class="card chk-sum ${all?'good':'badc'}"><b>${all?'✅ Усе збігається з еталоном':'❌ Є розбіжності з еталоном'}</b><div class="small">${ok} з ${n} показників правильні</div></div>
+  return (stale?`<div class="warn-card"><b>Еталон оновився.</b> У тестовій базі ще старі еталонні дані, тому частина рядків червона. Натисніть «Скинути до еталону» вгорі.</div>`:'')+controlCard(cs,csOk)+`<h2>Еталонні цифри</h2><div class="card chk-sum ${all?'good':'badc'}"><b>${all?'✅ Усе збігається з еталоном':'❌ Є розбіжності з еталоном'}</b><div class="small">${ok} з ${n} показників правильні</div></div>
   <div class="legend" style="margin-bottom:10px">Якщо ви вносили свої тестові операції, розбіжності — це нормально. Натисніть «Скинути до еталону» вгорі, і все має знову стати зеленим.</div>
   <div class="tbl-wrap"><table><thead><tr><th>Показник</th><th>Очікується</th><th>Є</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -1054,6 +1074,7 @@ function accBody(M){
     if(only){let tc=0;for(const k of codes)tc+=O[k].close;h+=`<div class="card" style="margin-bottom:10px"><b>${esc(only[0])} · ${esc(per)}: ${fmtU(a.only==='pl'||a.only==='inc'||a.only==='fx'?-tc:tc,a.only!=='cash'&&a.only!=='exp')}</b><div class="small muted">${a.only==='pl'||a.only==='fx'?'Доходи (кредит) мінус витрати (дебет). ':''}Натисніть рахунок, щоб розкрити.</div></div>`;}
     const ok=Math.abs(r2(t.dt-t.kt))<0.01;
     h+=`<h2>Оборотно-сальдова відомість · ${esc(per)}</h2><div class="tbl-wrap"><table class="osv"><thead>${head}</thead><tbody>${rows}<tr class="total"><td>Разом</td><td>${fmtN(t.dt)}</td><td>${fmtN(t.kt)}</td><td></td></tr></tbody></table></div>`;
+    if(!only&&!a.org){const cs=controlSums(M),cok=cs.every(x=>Math.abs(x.v)<0.01);h+=`<details class="okline"><summary>${cok?'✅ Контрольні суми: усі 0 — рахунки збігаються з екранами «Гроші», «Каси», «Клієнти».':'❌ Контрольні суми: є розбіжність — напишіть Claude.'}</summary>${controlCard(cs,cok)}</details>`;}
     if(!only)h+=`<div class="okline">${ok?'✅ Дебет = Кредит: усе сходиться.':'❌ Дебет ≠ Кредит — помилка в розрахунках, напишіть Claude.'} Дт — дебетове сальдо (актив, витрата), Кт — кредитове (борг, дохід). Натисніть рахунок, щоб розкрити.</div>`;
     return h;
   }
@@ -1127,6 +1148,11 @@ function fxScreen(M){
   }
   h+=`<div style="margin:14px 2px"><button class="btn" type="button" data-act="fxdet" data-v="1">Розшифровка по рахунках ›</button><div class="small muted" style="margin-top:4px">Для бухгалтера: те саме через рахунки 714 / 945, по кожній партії валюти.</div></div>`;
   return h;
+}
+
+function controlCard(cs,ok){
+  return `<div class="card chk-sum ${ok?'good':'badc'}" style="margin-top:10px"><b>${ok?'✅ Контрольні суми: усі 0':'❌ Контрольні суми: є розбіжність'}</b><div class="small">Те саме, пораховане двома різними способами. Різниця завжди має бути 0.</div></div>
+  <div class="tbl-wrap" style="margin-bottom:12px"><table class="osv"><tbody>${cs.map(x=>{const g=Math.abs(x.v)<0.01;return `<tr class="${g?'':'badrow'}"><td>${g?'✅':'❌'} ${esc(x.label)}</td><td>${g?'0':fmtU(x.v,true)}</td></tr>`;}).join('')}</tbody></table></div>`;
 }
 
 function accSettings(){

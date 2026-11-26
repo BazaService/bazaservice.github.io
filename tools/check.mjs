@@ -11,7 +11,7 @@ const month = '2026-11';
 const E = etalonData(month);
 const run = new Function('E', m[1] + `
   cfg = E.config; clients = E.clients; days = E.days;
-  return { M: model(), currentRate, osv: typeof osv === 'function' ? osv : null, fxToday: typeof fxToday === 'function' ? fxToday : null };`);
+  return { M: model(), currentRate, osv: typeof osv === 'function' ? osv : null, fxToday: typeof fxToday === 'function' ? fxToday : null, controlSums: typeof controlSums === 'function' ? controlSums : null };`);
 const { M, currentRate, osv } = run(E);
 let bad = 0, skipped = 0;
 for (const x of EXPECTED) {
@@ -21,6 +21,9 @@ for (const x of EXPECTED) {
   if (!ok) bad++;
   console.log((ok ? '✅ ' : '❌ ') + x.label + ': очікується ' + x.value + ', є ' + a);
 }
+// Контрольні суми (мають бути 0) — на еталоні і на варіантах нижче.
+const csCheck = (name, R) => { if (!R.controlSums) return; for (const x of R.controlSums(R.M)) { const ok = Math.abs(x.v) < 0.01; if (!ok) bad++; console.log((ok ? '✅ ' : '❌ ') + `[${name}] ${x.label}: ${x.v}`); } };
+csCheck('еталон', run(E));
 // Додатково: подвійний запис має сходитися за будь-якого курсу і будь-якого обміну.
 if (osv) {
   const variants = [['курс 44', E2 => { E2.config.rates = { USD: 44 }; }],
@@ -28,6 +31,7 @@ if (osv) {
   for (const [name, f] of variants) {
     const E2 = etalonData(month); f(E2);
     const R = run(E2), O = R.osv(R.M.posts, '', '', '', '');
+    csCheck(name, R);
     let sum = 0, pl = 0; for (const k in O) { sum += O[k].close; if (/^[79]/.test(k) && k !== '714' && k !== '945') pl -= O[k].close; }
     const fx = -((O['714'] ? O['714'].close : 0) + (O['945'] ? O['945'].close : 0));
     const ft = R.fxToday ? R.fxToday(R.M.ops, R.M.nowR, R.M.opR).reduce((t, r) => t + r.v, 0) : R.M.fxDiff;
