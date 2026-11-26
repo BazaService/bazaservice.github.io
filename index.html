@@ -306,7 +306,7 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 14</div>
+<div class="ver" id="ver">версія 15</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -581,6 +581,30 @@ function ledger(ops,nowR,opR){
   }
   return {posts};
 }
+/* Курсова різниця «від сьогоднішнього курсу»: кожна операція, де валюта перетворилась на гривні
+   (обмін, витрата чи дохід у валюті), порівнюється з тим, скільки це коштувало б сьогодні.
+   Сума всіх рядків = курсова різниця на екрані «Гроші». Курс, за яким валюта прийшла, тут не потрібен. */
+function fxToday(ops,nowR,opR){
+  const rows=[];
+  for(const o of ops){
+    const a=+o.amount||0,d={};
+    const add=(c,v)=>{if(c&&c!==BASE)d[c]=(d[c]||0)+v;};
+    let pl=0;
+    if(o.type==='exchange'){add(o.cur,-a);add(o.cur2,+(+o.amount2||0));}
+    else if(o.type==='income'){add(o.cur,a);if(o.cur!==BASE)pl=a*opR(o.cur,o.date);}
+    else if(o.type==='expense'){add(o.cur,-a);if(o.cur!==BASE)pl=-a*opR(o.cur,o.date);}
+    else continue;
+    const cs=Object.keys(d).filter(c=>d[c]);if(!cs.length)continue;
+    let now=0;for(const c of cs)now+=d[c]*nowR(c);
+    /* для обміну гривнева сторона — реальні гривні */
+    let uah=0;if(o.type==='exchange'){if(o.cur===BASE)uah=-a;if(o.cur2===BASE)uah+=+o.amount2||0;}
+    const v=r2(o.type==='exchange'?uah+now:now-pl);
+    const c=cs[0],q=Math.abs(d[c]);
+    const rate=o.type==='exchange'&&(o.cur===BASE||o.cur2===BASE)?Math.abs(uah)/q:opR(c,o.date);
+    rows.push({o,cur:c,q,rate,now:nowR(c),v,kind:o.type==='exchange'?(d[c]<0?'sell':'buy'):o.type});
+  }
+  return rows;
+}
 /* Оборотно-сальдова відомість. from/to — межі періоду (рядки YYYY-MM-DD, '' — без межі).
    by: 'acc' — по рахунках, або назва рахунку — по аналітиці цього рахунку.
    Сальдо: + дебетове, − кредитове. */
@@ -781,7 +805,7 @@ function panelBody(M){
   h+=`<h2>Результат</h2><div class="stats" style="margin-top:0">
     <div class="stat click" ${g('pl',m)}><div class="l">P&amp;L за ${esc(monthLabel(m).split(' ')[0].toLowerCase())} ›</div><div class="v ${sgn(plM)}">${fmtD(plM,true)}</div></div>
     <div class="stat click" ${g('pl','')}><div class="l">P&amp;L з початку ›</div><div class="v ${sgn(M.plAll)}">${fmtD(M.plAll,true)}</div></div>
-    <div class="stat click" ${g('fx','')}><div class="l">Курсова різниця ›</div><div class="v ${sgn(M.fxDiff)}">${fmtD(M.fxDiff,true)}</div></div>
+    <div class="stat click" ${g('fx','')}><div class="l">Курсова різниця ›</div><div class="v ${sgn(M.fxDiff)}">${fmtD(M.fxDiff,true)}</div>${fxNeedLine(M)?`<div class="bd">${esc(fxNeedLine(M))}</div>`:''}</div>
   </div>`;
   h+=`<div class="check">Баланс = P&amp;L з початку + курсова різниця. ${rateLine(M)}</div>`;
   h+=missingWarn(M);
@@ -1003,6 +1027,7 @@ const ACC_ONLY={pl:['P&L: доходи і витрати (без курсово�
 function accPeriod(){const m=ui.acc.month;return m?[m+'-01',m+'-31']:['',''];}
 function accHead(){
   const a=ui.acc,m=a.month;
+  if(a.only==='fx'&&!a.fxDetail&&!a.acc)return '';
   return `<div class="card"><div class="filters"><label>Місяць<input type="month" id="af-month" data-af="month" value="${esc(m)}"></label>
   <label>Організація<select id="af-org" data-af="org">${opt('','Усі разом',a.org)}${ORGS.map(([k,n])=>opt(k,n,a.org)).join('')}</select></label></div>
   <div class="row-actions"><button class="btn${m===thisMonth()?' on':''}" type="button" data-act="ap" data-v="month">Цей місяць</button><button class="btn${!m?' on':''}" type="button" data-act="ap" data-v="all">За весь час</button></div></div>`;
@@ -1016,6 +1041,7 @@ function accBody(M){
   let h=missingWarn(M);
   if(!a.acc){
     const only=ACC_ONLY[a.only];
+    if(a.only==='fx'&&!a.fxDetail)return h+fxScreen(M);
     if(only)h+=`<div class="crumbs"><button type="button" data-act="accopen" data-v="">Усі рахунки</button> › <b>${esc(only[0])}</b></div>`;
     const O=osv(M.posts,from,to,a.org,'');const codes=Object.keys(O).filter(k=>(O[k].open||O[k].dt||O[k].kt)&&(!only||only[1](k))).sort((x,y)=>ACC_ORDER.indexOf(x)-ACC_ORDER.indexOf(y));
     if(!codes.length)return h+`<div class="empty-state">За цей період проводок немає.</div>`;
@@ -1024,6 +1050,7 @@ function accBody(M){
       if(s!==sec){sec=s;rows+=`<tr class="sec"><td colspan="4">${esc(ACC_SEC[s])}</td></tr>`;}
       rows+=`<tr class="click" data-act="accopen" data-v="${esc(k)}"><td><span class="code">${esc(k)}</span> ›<span class="an">${esc(accName(k))}</span>${opn(x)}</td>${cells(x)}</tr>`;
       t.dt+=x.dt;t.kt+=x.kt;}
+    if(a.only==='fx')h+=`<div class="crumbs"><button type="button" data-act="fxdet" data-v="0">← Курсова різниця простими словами</button></div>`;
     if(only){let tc=0;for(const k of codes)tc+=O[k].close;h+=`<div class="card" style="margin-bottom:10px"><b>${esc(only[0])} · ${esc(per)}: ${fmtU(a.only==='pl'||a.only==='inc'||a.only==='fx'?-tc:tc,a.only!=='cash'&&a.only!=='exp')}</b><div class="small muted">${a.only==='pl'||a.only==='fx'?'Доходи (кредит) мінус витрати (дебет). ':''}Натисніть рахунок, щоб розкрити.</div></div>`;}
     const ok=Math.abs(r2(t.dt-t.kt))<0.01;
     h+=`<h2>Оборотно-сальдова відомість · ${esc(per)}</h2><div class="tbl-wrap"><table class="osv"><thead>${head}</thead><tbody>${rows}<tr class="total"><td>Разом</td><td>${fmtN(t.dt)}</td><td>${fmtN(t.kt)}</td><td></td></tr></tbody></table></div>`;
@@ -1053,6 +1080,52 @@ function accBody(M){
     return `<tr${o?` class="click" data-act="opview" data-v="${esc(p.day+'|'+p.opId)}"`:''}><td>${shortDate(p.date).slice(0,5)} ${p.reval?'<b>Переоцінка</b>':p.fx?'<b>Курсова різниця</b>':esc(p.note||title)}${o?' ›':''}${p.reval||p.fx?`<span class="fxn">${p.note.split('\n').map((l,i,A)=>`<span class="fxl${i===A.length-1?' fxr':''}">${esc(l)}</span>`).join('')}</span>`:''}<span class="an">кор. ${esc(other.acc)} ${esc(accName(other.acc))}${other.an?' · '+esc(anLabel(other.an)):''}${cur}${o&&o.comment?' · '+esc(o.comment):''}</span></td><td>${isDt?fmtN(p.sum):''}</td><td>${isDt?'':fmtN(p.sum)}</td></tr>`;}).join('');
   h+=`<div class="tbl-wrap"><table class="osv"><thead><tr><th>Проводка</th><th>Дебет</th><th>Кредит</th></tr></thead><tbody>${rows}<tr class="total"><td>Разом за ${esc(per)}</td><td>${fmtN(td)}</td><td>${fmtN(tk)}</td></tr></tbody></table></div>`;
   h+=`<div class="okline">Натисніть проводку, щоб відкрити операцію. «кор.» — рахунок, з яким пройшла проводка.</div>`;
+  return h;
+}
+
+/* Валютна позиція по кожній валюті: скільки маємо (каси + нам винні), скільки винні ми */
+function fxPosition(M){
+  const P={};const g=c=>P[c]=P[c]||{cash:0,owedMe:0,iOwe:0};
+  for(const c in M.cash)if(c!==BASE)g(c).cash+=M.cash[c];
+  for(const k in M.cli)for(const c in M.cli[k]){if(c===BASE)continue;const v=M.cli[k][c];if(v>0)g(c).owedMe+=v;else g(c).iOwe+=-v;}
+  for(const c in P){const x=P[c];x.cash=r2(x.cash);x.owedMe=r2(x.owedMe);x.iOwe=r2(x.iOwe);x.net=r2(x.cash+x.owedMe-x.iOwe);}
+  return P;
+}
+function fxNeedLine(M){
+  const P=fxPosition(M);return Object.keys(P).filter(c=>Math.abs(P[c].net)>=0.01).map(c=>P[c].net<0?`Треба докупити ${fmt(-P[c].net,c)}`:`Зайвих ${fmt(P[c].net,c)}`).join(' · ');
+}
+function fxScreen(M){
+  const lr2=x=>(Math.round(x*100)/100).toLocaleString('uk-UA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const rows=fxToday(M.ops,M.nowR,M.opR);const P=fxPosition(M);
+  const curs=[...new Set([...Object.keys(P),...rows.map(r=>r.cur)])];
+  let total=0;for(const r of rows)total+=r.v;total=r2(total);
+  let h=`<section class="hero"><div class="lbl">Курсова різниця</div><div class="num ${sgn(total)}">${fmtU(total,true)}</div>
+    <div class="sub">Курс сьогодні: ${curs.map(c=>`${esc(c)} ${lr2(M.nowR(c))}`).join(' · ')} — міняється щодня, тому і ця сума щодня інша</div></section>`;
+  for(const c of curs){
+    /* Отримали / віддали валюту від клієнтів — курс не важливий */
+    const io=M.ops.filter(o=>(o.type==='clientIn'||o.type==='clientOut')&&o.cur===c);
+    if(io.length){
+      h+=`<h2>Отримали і віддали ${esc(c)}</h2><div class="tbl-wrap"><table class="osv"><tbody>${io.map(o=>`<tr class="click" data-act="opview" data-v="${esc(o.day+'|'+o.id)}"><td>${shortDate(o.date).slice(0,5)} · ${o.type==='clientIn'?'Від':'Клієнту'} «${esc(clientName(o.client))}» ›</td><td><b>${o.type==='clientIn'?'+':'−'}${fmt(+o.amount,c)}</b></td></tr>`).join('')}</tbody></table></div>
+      <div class="small muted" style="margin:6px 2px 4px">Курс тут не важливий: борги в ${esc(c)} повертаються тією ж валютою.</div>`;
+    }
+    const rs=rows.filter(r=>r.cur===c);
+    if(rs.length){
+      let t=0,q=0;
+      const tr=rs.map(r=>{t+=r.v;const o=r.o;const sell=r.kind==='sell'||r.kind==='expense';q+=sell?r.q:-r.q;
+        const diff=sell?r.rate-r.now:r.now-r.rate;
+        const what=r.kind==='sell'?'':r.kind==='buy'?'купили ':r.kind==='expense'?'витрата ':'дохід ';
+        return `<tr class="click" data-act="opview" data-v="${esc(o.day+'|'+o.id)}"><td>${shortDate(o.date).slice(0,5)} ${what}${fmt(r.q,c)} ›</td><td>${lr2(r.rate)}</td><td>${diff>=0?'+':'−'}${lr2(Math.abs(diff))}</td><td class="${sgn(r.v)}"><b>${fmtU(r.v,true)}</b></td></tr>`;}).join('');
+      h+=`<h2>Обміняли ${esc(c)}</h2><div class="small muted" style="margin:-4px 2px 8px">Курс обміну зафіксований назавжди, «сьогодні» перераховується щодня.</div>
+      <div class="tbl-wrap"><table class="osv"><thead><tr><th>Дата</th><th>Курс обміну</th><th>Сьогодні ${lr2(M.nowR(c))}</th><th>Разом</th></tr></thead><tbody>${tr}<tr class="total"><td>Разом ${fmt(r2(q),c)}</td><td></td><td></td><td class="${sgn(t)}">${fmtU(r2(t),true)}</td></tr></tbody></table></div>`;
+    }
+    const x=P[c];
+    if(x){
+      const have=r2(x.cash+x.owedMe);
+      h+=`<h2>Що це означає</h2><div class="card"><div>Маємо <b>${fmt(have,c)}</b> (${[x.cash?'у касах '+fmt(x.cash,c):'',x.owedMe?'нам винні '+fmt(x.owedMe,c):''].filter(Boolean).join(' + ')||'0'}), а винні <b>${fmt(x.iOwe,c)}</b>.</div>
+      <div style="margin-top:6px"><b>${x.net<0?`Треба буде докупити ${fmt(-x.net,c)}`:x.net>0?`Зайвих ${fmt(x.net,c)}`:'Скільки маємо, стільки й винні'}</b>${x.net<0&&rs.length?(rs.some(r=>r.kind==='expense')?' — стільки, скільки обміняли і витратили.':' — рівно стільки, скільки обміняли.'):''}</div></div>`;
+    }
+  }
+  h+=`<div style="margin:14px 2px"><button class="btn" type="button" data-act="fxdet" data-v="1">Розшифровка по рахунках ›</button><div class="small muted" style="margin-top:4px">Для бухгалтера: те саме через рахунки 714 / 945, по кожній партії валюти.</div></div>`;
   return h;
 }
 
@@ -1405,8 +1478,9 @@ document.addEventListener('click',async e=>{
     case 'promote2':runPromote();break;
     case 'ghsave':{const t=(document.getElementById('gh-token').value||'').trim();if(!/^(github_pat_|ghp_)/.test(t)){toast('Це не схоже на ключ GitHub');break;}try{localStorage.setItem('bs.ghtoken',t);}catch(e){}promoteAsk='confirm';renderTestBar();break;}
     case 'goaudit':location.hash='#zminy';break;
-    case 'accgo':{const [acc,an,m,only]=v.split('|');ui.acc={month:m||'',org:'',acc:acc||'',an:an||'',only:only||''};if(ui.tab==='rakhunky')render(true);else location.hash='#rakhunky';break;}
+    case 'accgo':{const [acc,an,m,only]=v.split('|');ui.acc={month:m||'',org:'',acc:acc||'',an:an||'',only:only||'',fxDetail:false};if(ui.tab==='rakhunky')render(true);else location.hash='#rakhunky';break;}
     case 'accopen':ui.acc.acc=v;ui.acc.an='';if(!v)ui.acc.only='';render();window.scrollTo(0,0);break;
+    case 'fxdet':ui.acc.fxDetail=v==='1';render();window.scrollTo(0,0);break;
     case 'acconly':ui.acc.acc='';ui.acc.an='';ui.acc.only=v;render();window.scrollTo(0,0);break;
     case 'anopen':ui.acc.an=v;render();window.scrollTo(0,0);break;
     case 'ap':ui.acc.month=v==='month'?thisMonth():'';render(true);break;
