@@ -23,7 +23,7 @@ for (const x of EXPECTED) {
 }
 // Додатково: подвійний запис має сходитися за будь-якого курсу і будь-якого обміну.
 if (osv) {
-  const variants = [['курс 42', E2 => { E2.config.rates = { USD: 42 }; }],
+  const variants = [['курс 44', E2 => { E2.config.rates = { USD: 44 }; }],
                     ['обмін дорожче + курс 38', E2 => { for (const d in E2.days) for (const id in E2.days[d]) { const o = E2.days[d][id]; if (o.type === 'exchange') o.amount2 = 4500; } E2.config.rates = { USD: 38 }; }]];
   for (const [name, f] of variants) {
     const E2 = etalonData(month); f(E2);
