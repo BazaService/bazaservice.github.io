@@ -32,7 +32,8 @@
 1. `restoreSnap()` миттєво показує останні дані з `localStorage` (`bs.snap.v1`).
 2. Паралельно `loadSdk()` вантажить Firebase, `onAuthStateChanged` → вхід через Google.
 3. Підписки `onSnapshot` оновлюють дані; Firestore працює з офлайн-кешем (`persistentLocalCache`), записи без інтернету відправляються пізніше автоматично.
-4. Обгортка `fbdb` (`doc(path).set/update/get/onSnapshot`, `collection(path).onSnapshot`) імітує старий API: `update` = `setDoc(..., {merge:true})` (глибоке злиття). Записи **не чекають** відповіді сервера (щоб працювало офлайн); помилки йдуть у подію `fb-write-error`.
+4. Вкладки внизу: Гроші (`#panel`, відкривається першою) · Каси (`#kasy`) · Клієнти · Журнал · Звіт. Порядок — `TABS` і розмітка `nav.tabs`.
+5. Обгортка `fbdb` (`doc(path).set/update/get/onSnapshot`, `collection(path).onSnapshot`) імітує старий API: `update` = `setDoc(..., {merge:true})` (глибоке злиття). Записи **не чекають** відповіді сервера (щоб працювало офлайн); помилки йдуть у подію `fb-write-error`.
 
 ### Ролі
 | Роль | Бачить | Може |
