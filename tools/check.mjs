@@ -11,12 +11,12 @@ const month = '2026-11';
 const E = etalonData(month);
 const run = new Function('E', m[1] + `
   cfg = E.config; clients = E.clients; days = E.days;
-  return { M: model(), currentRate, osv: typeof osv === 'function' ? osv : null, fxToday: typeof fxToday === 'function' ? fxToday : null, controlSums: typeof controlSums === 'function' ? controlSums : null };`);
-const { M, currentRate, osv } = run(E);
+  return { M: model(), currentRate, osv: typeof osv === 'function' ? osv : null, fxToday: typeof fxToday === 'function' ? fxToday : null, controlSums: typeof controlSums === 'function' ? controlSums : null, interestDue: typeof interestDue === 'function' ? interestDue : null, interestPending: typeof interestPending === 'function' ? interestPending : null };`);
+const { M, currentRate, osv, interestDue, interestPending } = run(E);
 let bad = 0, skipped = 0;
 for (const x of EXPECTED) {
   if (!osv && x.group === 'Рахунки') { skipped++; continue; }
-  const a = actualValue(M, { currentRate, osv, month }, x.key);
+  const a = actualValue(M, { currentRate, osv, month, interestDue, interestPending }, x.key);
   const ok = a != null && Math.abs(a - x.value) < 0.005;
   if (!ok) bad++;
   console.log((ok ? '✅ ' : '❌ ') + x.label + ': очікується ' + x.value + ', є ' + a);
@@ -24,6 +24,24 @@ for (const x of EXPECTED) {
 // Контрольні суми (мають бути 0) — на еталоні і на варіантах нижче.
 const csCheck = (name, R) => { if (!R.controlSums) return; for (const x of R.controlSums(R.M)) { const ok = Math.abs(x.v) < 0.01; if (!ok) bad++; console.log((ok ? '✅ ' : '❌ ') + `[${name}] ${x.label}: ${x.v}`); } };
 csCheck('еталон', run(E));
+// Відсотки по днях: окремий сценарій (листопад, 30 днів). Інвестор дав 1 000 $ 01.11, повернули 500 $ 16.11,
+// інвестор додав 3 000 $ 21.11. День отримання рахується, день повернення — ні:
+// 1 000 × 15 дн. + 500 × 5 дн. + 3 500 × 10 дн. = 15 000 + 2 500 + 35 000 = 52 500 $·дн × 1% / 30 = 17,50 $
+{
+  const R = run(etalonData(month));
+  if (R.interestDue) {
+    const t0 = Date.parse('2026-11-01T08:00:00Z');
+    const ops = [
+      { id: 'i1', type: 'clientIn', client: 'X', to: 'b-a', cur: 'USD', amount: 1000, date: '2026-11-01', ts: t0 },
+      { id: 'i2', type: 'clientOut', client: 'X', from: 'b-a', cur: 'USD', amount: 500, date: '2026-11-16', ts: t0 + 1 },
+      { id: 'i3', type: 'clientIn', client: 'X', to: 'b-a', cur: 'USD', amount: 3000, date: '2026-11-21', ts: t0 + 2 }];
+    const v = R.interestDue(ops, 'X', '2026-11', 1, '2026-11-01', 'USD').amount;
+    const v2 = R.interestDue(ops, 'X', '2026-11', 1, '2026-11-21', 'USD').amount; // відсотки лише з 21.11: 3 500 × 10 дн. = 11,67
+    for (const [l, a, e] of [['відсотки по днях (1 000 / 500 / 3 500)', v, 17.5], ['відсотки з дати початку 21.11', v2, 11.67]]) {
+      const ok = Math.abs(a - e) < 0.005; if (!ok) bad++; console.log((ok ? '✅ ' : '❌ ') + `[відсотки] ${l}: ${a} / ${e}`);
+    }
+  }
+}
 // Додатково: подвійний запис має сходитися за будь-якого курсу і будь-якого обміну.
 if (osv) {
   const variants = [['курс 44', E2 => { E2.config.rates = { USD: 44 }; }],

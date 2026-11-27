@@ -1,5 +1,5 @@
 // Версія еталону: збільшувати, коли змінюються дані еталону. Якщо в базі старіша — «Перевірка» попросить скинути.
-export const ETALON_VER = 3;
+export const ETALON_VER = 4;
 // Еталонні дані для тестової версії і очікувані результати. Погоджено з власником 26.11.2026.
 // Усі суми круглі. Витрат у валюті немає (як у житті). Курс: 01 обмін по 40, 15 обмін по 42 → сьогодні 42.
 //
@@ -9,16 +9,19 @@ export const ETALON_VER = 3;
 //  06 Інший дохід 500 ₴ → Б                   07 Дали Клієнту 1 000 ₴ з А
 //  08 Клієнт повернув 500 ₴ → Б               15 Обмін 200 $ → 8 400 ₴ (42), Каса А
 //  + видалена витрата 900 ₴ — не має рахуватися ніде.
+//  Останній день місяця: нараховано відсотки інвестору 10 $ (1% на місяць від 1 000 $ за весь місяць, по днях),
+//    за курсом на кінець місяця 42 = 420 ₴ витрат; борг по відсотках — окремий клієнт «%%% Інвестор».
+//  (Погоджено 27.11.2026.)
 //
 //  Каса А: 4000 − 1000 − 1000 − 1000 − 1000 + 8400 = 8 400 ₴ і 1000 − 100 − 200 = 700 $.  Каса Б: 1000 − 500 + 500 + 500 = 1 500 ₴.
 //  У касах: 9 900 + 700 × 42 = 39 300.  Інвестору винні 1 000 $ = 42 000.  Клієнт винен 500.
-//  Баланс: 39 300 + 500 − 42 000 = −2 200.  P&L: 500 − 1 500 − 1 000 = −2 000.
-//  Курсова різниця −200: обмін 100 $ по 40 при курсі сьогодні 42 → −200; обмін 200 $ по 42 → 0. Треба докупити 300 $.
+//  Я винен: 42 000 + 420 (відсотки) = 42 420.  Баланс: 39 300 + 500 − 42 420 = −2 620.  P&L: 500 − 1 500 − 1 000 − 420 = −2 420.
+//  Курсова різниця −200: обмін 100 $ по 40 при курсі сьогодні 42 → −200; обмін 200 $ по 42 → 0. Треба докупити 310 $ (маємо 700, винні 1 000 + 10).
 //
 //  Рахунки (FIFO-партії): 301 = 9 900; 302 = 700 $ (облік по 40 = 28 000, переоцінка до 42 → 29 400);
-//    377 = 500; 60 = −42 000; 91 = 1 500 (Ремонт + Зарплата); 949 = 1 000 (ОЗ); 719 = −500;
+//    377 = 500; 60 = −42 000; 684 = −420 (відсотки до сплати); 91 = 1 500; 949 = 1 000 (ОЗ); 951 = 420 (відсотки); 719 = −500;
 //    714 = −1 800 (обмін 200 $ дорожче на 400 + переоцінка каси 1 400), 945 = 2 000 (переоцінка боргу інвестору) → курсова −200.
-//    Оборот Дт = Оборот Кт = 61 300 (усі проводки, разом з переоцінкою). Сума сальдо = 0.
+//    Оборот Дт = Оборот Кт = 61 720 (усі проводки, разом з переоцінкою). Сума сальдо = 0.
 
 export function etalonData(month) {
   const d = n => month + '-' + String(n).padStart(2, '0');
@@ -29,6 +32,8 @@ export function etalonData(month) {
     cur2: null, amount2: null, rate: null, category: null, isAsset: false, assetName: null,
     comment: '', deleted: false, by: 'etalon', ts: t0 + i * 60000, editedBy: null, editedTs: null
   }, o) });
+  const [yy, mm] = month.split('-').map(Number);
+  const last = new Date(yy, mm, 0).getDate();
   const list = [
     op(1,  { type: 'clientIn',  client: 'c-inv', to: 'b-a', cur: 'USD', amount: 1000, comment: 'Еталон: інвестор дав 1 000 $' }),
     op(1,  { type: 'exchange',  from: 'b-a', to: 'b-a', cur: 'USD', amount: 100, cur2: 'UAH', amount2: 4000, rate: 40, comment: 'Еталон: обмін 100 $ по 40' }),
@@ -41,6 +46,7 @@ export function etalonData(month) {
     op(8,  { type: 'clientIn',  client: 'c-cl', to: 'b-b', amount: 500, comment: 'Еталон: клієнт повернув' }),
     op(10, { type: 'expense',   payVia: 'box', from: 'b-a', amount: 900, category: 'Ремонт', deleted: true, comment: 'Еталон: ВИДАЛЕНА, не має рахуватись' }),
     op(15, { type: 'exchange',  from: 'b-a', to: 'b-a', cur: 'USD', amount: 200, cur2: 'UAH', amount2: 8400, rate: 42, comment: 'Еталон: обмін 200 $ по 42 (курс зріс)' }),
+    op(last, { type: 'expense', payVia: 'client', client: 'c-int', cur: 'USD', amount: 10, rate: 42, category: 'Відсотки інвестору', interestFor: { client: 'c-inv', month }, comment: 'Еталон: відсотки інвестору за місяць' }),
   ];
   const days = {};
   for (const x of list) (days[x.day] = days[x.day] || {})[x.id] = x.op;
@@ -49,9 +55,9 @@ export function etalonData(month) {
       boxes: [{ id: 'b-a', name: 'Каса А', archived: false }, { id: 'b-b', name: 'Каса Б', archived: false }],
       categories: ['Ремонт', 'Зарплата', 'Інше'], incomeCategories: ['Інший дохід'],
       currencies: ['UAH', 'USD'], rates: {}, legacyNames: { etalon: 'Еталон' }, etalonMonth: month, etalonVer: ETALON_VER,
-      acct: { clients: { 'c-inv': 'investor' }, exp: {}, inc: {} }
+      acct: { clients: { 'c-inv': 'investor' }, exp: {}, inc: {}, interest: { 'c-inv': { pct: 1, from: month + '-01', cur: 'USD' } } }
     },
-    clients: { 'c-inv': { name: 'Інвестор', archived: false }, 'c-cl': { name: 'Клієнт', archived: false } },
+    clients: { 'c-inv': { name: 'Інвестор', archived: false }, 'c-cl': { name: 'Клієнт', archived: false }, 'c-int': { name: '%%% Інвестор', archived: false } },
     days
   };
 }
@@ -64,30 +70,35 @@ export const EXPECTED = [
   { group: 'Каси',    label: 'У касах (усе в гривні)',    key: 'cash',        value: 39300,  cur: 'UAH' },
   { group: 'Клієнти', label: 'Інвестор, долари',          key: 'cli:c-inv:USD', value: -1000, cur: 'USD' },
   { group: 'Клієнти', label: 'Клієнт, гривня',            key: 'cli:c-cl:UAH',  value: 500,   cur: 'UAH' },
+  { group: 'Клієнти', label: '%%% Інвестор (відсотки), долари', key: 'cli:c-int:USD', value: -10, cur: 'USD' },
   { group: 'Клієнти', label: 'Мені винні',                key: 'owed',        value: 500,    cur: 'UAH' },
-  { group: 'Клієнти', label: 'Я винен',                   key: 'owe',         value: 42000,  cur: 'UAH' },
-  { group: 'Гроші',   label: 'Баланс',                    key: 'balance',     value: -2200,  cur: 'UAH' },
-  { group: 'Гроші',   label: 'P&L з початку',             key: 'plAll',       value: -2000,  cur: 'UAH' },
-  { group: 'Гроші',   label: 'P&L за місяць',             key: 'plMonth',     value: -2000,  cur: 'UAH' },
+  { group: 'Клієнти', label: 'Я винен',                   key: 'owe',         value: 42420,  cur: 'UAH' },
+  { group: 'Гроші',   label: 'Баланс',                    key: 'balance',     value: -2620,  cur: 'UAH' },
+  { group: 'Гроші',   label: 'P&L з початку',             key: 'plAll',       value: -2420,  cur: 'UAH' },
+  { group: 'Гроші',   label: 'P&L за місяць',             key: 'plMonth',     value: -2420,  cur: 'UAH' },
   { group: 'Гроші',   label: 'Курсова різниця',           key: 'fx',          value: -200,      cur: 'UAH' },
-  { group: 'Гроші',   label: 'Треба докупити доларів',    key: 'need:USD',    value: 300,       cur: 'USD' },
+  { group: 'Гроші',   label: 'Треба докупити доларів',    key: 'need:USD',    value: 310,       cur: 'USD' },
   { group: 'Звіт',    label: 'Доходи за місяць',          key: 'month:inc',   value: 500,     cur: 'UAH' },
-  { group: 'Звіт',    label: 'Витрати за місяць (без ОЗ)', key: 'month:exp',  value: 1500,    cur: 'UAH' },
+  { group: 'Звіт',    label: 'Витрати за місяць (без ОЗ, з відсотками)', key: 'month:exp',  value: 1920,    cur: 'UAH' },
   { group: 'Звіт',    label: 'Основні засоби за місяць',  key: 'month:oz',    value: 1000,    cur: 'UAH' },
   { group: 'Рахунки', label: '301 Каса в гривні',          key: 'acc:301',     value: 9900,   cur: 'UAH' },
   { group: 'Рахунки', label: '302 Каса в валюті (у гривні)', key: 'acc:302',   value: 29400,  cur: 'UAH' },
   { group: 'Рахунки', label: '302 Каса в валюті, долари',  key: 'acccur:302:USD', value: 700, cur: 'USD' },
   { group: 'Рахунки', label: '377 Інші дебітори (Клієнт)',  key: 'acc:377',    value: 500,    cur: 'UAH' },
   { group: 'Рахунки', label: '60 Позики (Інвестор), кредит', key: 'acc:60',    value: -42000, cur: 'UAH' },
+  { group: 'Рахунки', label: '684 Відсотки до сплати, кредит', key: 'acc:684',  value: -420,   cur: 'UAH' },
+  { group: 'Рахунки', label: '951 Відсотки за позиками',    key: 'acc:951',    value: 420,    cur: 'UAH' },
   { group: 'Рахунки', label: '91 Загальновиробничі витрати', key: 'acc:91',    value: 1500,    cur: 'UAH' },
   { group: 'Рахунки', label: '949 Інші витрати (ОЗ)',      key: 'acc:949',     value: 1000,    cur: 'UAH' },
   { group: 'Рахунки', label: '719 Інші доходи, кредит',    key: 'acc:719',     value: -500,    cur: 'UAH' },
   { group: 'Рахунки', label: '714 − 945 Курсова різниця',  key: 'accfx',       value: -200,      cur: 'UAH' },
-  { group: 'Рахунки', label: 'Оборот Дт (усі проводки)',        key: 'turn:dt',     value: 61300,  cur: 'UAH' },
-  { group: 'Рахунки', label: 'Оборот Кт (усі проводки)',        key: 'turn:kt',     value: 61300,  cur: 'UAH' },
+  { group: 'Рахунки', label: 'Оборот Дт (усі проводки)',        key: 'turn:dt',     value: 61720,  cur: 'UAH' },
+  { group: 'Рахунки', label: 'Оборот Кт (усі проводки)',        key: 'turn:kt',     value: 61720,  cur: 'UAH' },
   { group: 'Рахунки', label: 'Сума всіх сальдо (має бути 0)', key: 'accsum',   value: 0,      cur: 'UAH' },
+  { group: 'Відсотки', label: 'Відсотки інвестору за місяць (розрахунок по днях)', key: 'intdue', value: 10, cur: 'USD' },
+  { group: 'Відсотки', label: 'Місяців, де ще треба нарахувати', key: 'intpending', value: 0, cur: '' },
   { group: 'Інше',    label: 'Курс долара',               key: 'rate:USD',    value: 42,     cur: 'UAH' },
-  { group: 'Інше',    label: 'Кількість операцій (без видалених)', key: 'ops', value: 10,    cur: '' },
+  { group: 'Інше',    label: 'Кількість операцій (без видалених)', key: 'ops', value: 11,    cur: '' },
 ];
 
 // Фактичне значення показника з розрахунків застосунку (model()).
@@ -109,6 +120,8 @@ export function actualValue(M, ctx, key) {
     case 'month': return Math.round((mm[p[1]] || 0) * 100) / 100;
     case 'rate': return ctx.currentRate(p[1], M.hist);
     case 'ops': return M.ops.length;
+    case 'intdue': return ctx.interestDue ? ctx.interestDue(M.ops, 'c-inv', ctx.month, 1, ctx.month + '-01', 'USD').amount : null;
+    case 'intpending': { if (!ctx.interestPending) return null; const [y, m] = ctx.month.split('-').map(Number); const ld = ctx.month + '-' + String(new Date(y, m, 0).getDate()).padStart(2, '0'); return ctx.interestPending(M.ops, ld > '2099' ? ld : ld).length; }
     case 'need': { const c = p[1]; let have = (M.cash[c] || 0), owe = 0; for (const k in M.cli) { const v = (M.cli[k] || {})[c] || 0; if (v > 0) have += v; else owe -= v; } return Math.round((owe - have) * 100) / 100; }
     case 'acc': return bal(p[1]);
     case 'acccur': return O[p[1]] ? (O[p[1]].cur[p[2]] || 0) : 0;
