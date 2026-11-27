@@ -42,6 +42,26 @@ csCheck('еталон', run(E));
     }
   }
 }
+// Нарахування 25-го і коригування наступного місяця: інвестор дав 1 000 $ 01.11, 25.11 нараховано 10 $ за листопад,
+// 28.11 інвестор додав 3 000 $ → насправді за листопад 10 + 3 000 × 3 дн. × 1% / 30 = 13 $ → 25.12: коригування +3 $,
+// грудень (прогноз) 4 000 × 1% = 40 $ → разом 43 $.
+{
+  const E3 = etalonData(month);
+  const R = run(E3);
+  if (R.interestPending) {
+    const t0 = Date.parse('2026-11-01T08:00:00Z');
+    E3.days = { '2026-11-01': { a: { type: 'clientIn', date: '2026-11-01', client: 'c-inv', to: 'b-a', cur: 'USD', amount: 1000, ts: t0 } },
+      '2026-11-25': { b: { type: 'expense', date: '2026-11-25', payVia: 'client', client: 'c-int', cur: 'USD', amount: 10, rate: 42, category: 'Відсотки інвестору', ts: t0 + 1, interestFor: { client: 'c-inv', month: '2026-11', pct: 1, parts: { '2026-11': 10 } } } },
+      '2026-11-28': { c: { type: 'clientIn', date: '2026-11-28', client: 'c-inv', to: 'b-a', cur: 'USD', amount: 3000, ts: t0 + 2 } } };
+    E3.config.acct.interest = { 'c-inv': { pct: 1, from: '2026-11-01', cur: 'USD' } };
+    const R3 = run(E3);
+    const before = R3.interestPending(R3.M.ops, '2026-12-24').length;
+    const p = R3.interestPending(R3.M.ops, '2026-12-25')[0] || {};
+    for (const [l, a, e] of [['до 25.12 вікна немає', before, 0], ['25.12: коригування за листопад', p.corr && p.corr[0] ? p.corr[0].v : null, 3], ['25.12: разом до нарахування', p.total, 43]]) {
+      const ok = a != null && Math.abs(a - e) < 0.005; if (!ok) bad++; console.log((ok ? '✅ ' : '❌ ') + `[відсотки 25-го] ${l}: ${a} / ${e}`);
+    }
+  }
+}
 // Додатково: подвійний запис має сходитися за будь-якого курсу і будь-якого обміну.
 if (osv) {
   const variants = [['курс 44', E2 => { E2.config.rates = { USD: 44 }; }],
