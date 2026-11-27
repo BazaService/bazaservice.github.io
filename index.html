@@ -98,6 +98,7 @@ td.ind{padding-left:22px}
 tr.click{cursor:pointer}.stat.click,.hero.click{cursor:pointer}.stat.click:active,.hero.click:active{opacity:.75}tr.click:active td{background:var(--surface-2)}
 td .an{display:block;font-size:12px;color:var(--muted);font-weight:400}
 td.code{font-weight:800}
+.upd-bar{position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;background:var(--text);color:var(--bg);border-radius:14px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.3)}.upd-bar button{background:var(--bg);color:var(--text);border:0;border-radius:10px;padding:8px 14px;font-weight:800;font-size:15px}
 .fxn{display:block;font-size:12.5px;line-height:1.4;margin:4px 0 2px;font-weight:400}.fxl{display:block;margin-top:5px}.fxr{font-weight:700}
 .acl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:8px;align-items:center;margin:6px 0}.acl span{font-size:14px;overflow-wrap:anywhere}.acl select{width:100%;min-width:0}.acc-sub{display:block;margin:14px 0 4px}
 table.osv{font-size:13px}table.osv th,table.osv td{padding:8px 6px}table.osv th:first-child,table.osv td:first-child{padding-left:10px}table.osv th:last-child,table.osv td:last-child{padding-right:10px}
@@ -306,7 +307,7 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 19</div>
+<div class="ver" id="ver">версія 21</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -490,17 +491,30 @@ function interestDue(ops,inv,m,pct,from,cur){
   for(const x of segs)x.v=r2(x.v);
   return {amount:r2(total),segs:segs.filter(x=>x.owe>0),dim};
 }
-/* Які місяці ще не нараховані: від дати початку до місяця, останній день якого вже настав */
+/* Нарахування 25-го: за весь місяць, ніби до кінця місяця борг не зміниться.
+   Якщо після 25-го борг змінився — наступного місяця різниця йде рядком «коригування».
+   В операції interestFor.parts = {місяць: сума} — за які місяці скільки нараховано (і pct — ставка). */
+const INT_DAY=25;
+function intParts(o){const f=o.interestFor;return f.parts||{[f.month]:+o.amount||0};}
 function interestPending(ops,today){
-  const out=[];const done={};const skip=acctCfg().interestSkip||{};
-  for(const o of ops)if(o.interestFor)done[o.interestFor.client+'|'+o.interestFor.month]=1;
+  const out=[];const skip=acctCfg().interestSkip||{};
+  const acc={},main={},pctOf={};
+  for(const o of ops){const f=o.interestFor;if(!f)continue;main[f.client+'|'+f.month]=1;
+    for(const [m,v] of Object.entries(intParts(o))){const k=f.client+'|'+m;acc[k]=(acc[k]||0)+v;if(f.pct!=null&&m===f.month)pctOf[k]=+f.pct;}}
   for(const id of Object.keys(clients)){if(clients[id].archived||clientKind(id)!=='investor')continue;
     const c=interestCfg(id);if(!(c.pct>0))continue;
-    for(let m=c.from.slice(0,7);lastDayOf(m)<=today;m=nextMonth(m)){
-      if(done[id+'|'+m]||skip[id+'|'+m])continue;
-      const d=interestDue(ops,id,m,c.pct,c.from,c.cur);if(d.amount>0)out.push({inv:id,month:m,cfg:c,due:d});}}
+    for(let m=c.from.slice(0,7);m+'-'+String(INT_DAY).padStart(2,'0')<=today;m=nextMonth(m)){
+      if(main[id+'|'+m]||skip[id+'|'+m])continue;
+      /* коригування за попередні, вже закриті місяці */
+      const corr=[];
+      for(let p=c.from.slice(0,7);p<m;p=nextMonth(p)){const k=id+'|'+p;if(acc[k]==null)continue;
+        const act=interestDue(ops,id,p,pctOf[k]!=null?pctOf[k]:c.pct,c.from,c.cur).amount;const d=r2(act-acc[k]);if(Math.abs(d)>=0.01)corr.push({month:p,v:d,actual:act,was:r2(acc[k])});}
+      const d=interestDue(ops,id,m,c.pct,c.from,c.cur);
+      const total=r2(d.amount+corr.reduce((t,x)=>t+x.v,0));
+      if(total>0||corr.length)out.push({inv:id,month:m,cfg:c,due:d,corr,total});}}
   return out;
 }
+
 function incAcc(cat){const m=(acctCfg().inc||{})[cat];return ACC[m]?m:'719';}
 function boxOrg(id){const b=C().boxes.find(x=>x.id===id);return b&&b.org||'cash';}
 function cashAcc(cur){return cur===BASE?'301':'302';}
@@ -771,6 +785,17 @@ const GH_API='https://api.github.com/repos/BazaService/bazaservice.github.io/act
 function ghToken(){try{return localStorage.getItem('bs.ghtoken')||'';}catch(e){return '';}}
 async function ghFetch(path,opt){return fetch(GH_API+path,Object.assign({headers:{Authorization:'Bearer '+ghToken(),Accept:'application/vnd.github+json'}},opt||{}));}
 function promoteSay(m,done){promoteMsg=m;promoteDone=!!done;renderTestBar();}
+/* Чекаємо, поки GitHub опублікує робочу версію, і лише тоді кажемо «готово» */
+async function waitLive(){
+  const want=(document.getElementById('ver')||{}).textContent||'';
+  for(let i=0;i<36;i++){
+    promoteSay('⏳ Перенесено. GitHub публікує сайт — зазвичай 1–2 хвилини…');
+    try{const r=await fetch('../index.html?t='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/id="ver">([^<]*)</);
+      if(m&&m[1]===want)return promoteSay(`✅ Готово: робоча — ${esc(want)}, уже на сайті. Відкрийте робочий застосунок — він оновиться сам, з першого разу.`,true);}catch(e){}
+    await new Promise(f=>setTimeout(f,5000));
+  }
+  promoteSay('✅ Перенесено. Сайт оновлюється довше, ніж зазвичай — відкрийте робочий застосунок за кілька хвилин, він оновиться сам.',true);
+}
 async function runPromote(){
   promoteAsk='run';promoteSay('⏳ Запускаю перенесення…');
   const since=Date.now()-60000;
@@ -784,7 +809,7 @@ async function runPromote(){
       const run=((await q.json()).workflow_runs||[])[0];
       if(!run||Date.parse(run.created_at)<since){promoteSay('⏳ Чекаю, поки GitHub почне…');continue;}
       if(run.status!=='completed'){promoteSay('⏳ Перевіряю еталон і переношу… (зазвичай до хвилини)');continue;}
-      if(run.conclusion==='success')return promoteSay('✅ Перенесено. Через 1–2 хвилини відкрийте робочий застосунок, закрийте і відкрийте ще раз.',true);
+      if(run.conclusion==='success')return waitLive();
       return promoteSay('❌ Не перенесено: перевірка еталоном не пройшла або сталася помилка. Робоча версія не змінилась. Напишіть Claude.',true);
     }
     promoteSay('⏳ GitHub довго відповідає. Перевірте пізніше через «Деталі».',true);
@@ -1205,28 +1230,32 @@ function maybeInterestPrompt(M){
 function intRecalc(){
   const x=intState;if(!x)return;const pct=num(document.getElementById('int-pct').value),rate=num(document.getElementById('int-rate').value);
   const d=interestDue(curM.ops,x.inv,x.month,pct,x.cfg.from,x.cfg.cur);x.pct=pct;x.rate=rate;x.due=d;
+  x.total=r2(d.amount+(x.corr||[]).reduce((t,c)=>t+c.v,0));
   const lr2=v=>(Math.round(v*100)/100).toLocaleString('uk-UA',{minimumFractionDigits:2,maximumFractionDigits:2});
-  document.getElementById('int-segs').innerHTML=d.segs.map(g=>`<div class="li"><span>${shortDate(g.from).slice(0,5)}–${shortDate(g.to).slice(0,5)}: борг ${fmt(g.owe,x.cfg.cur)} × ${g.days} дн.</span><b>${fmt(g.v,x.cfg.cur)}</b></div>`).join('')||'<div class="li">Боргу в цьому місяці не було</div>';
-  document.getElementById('int-sum').innerHTML=`<b>${fmt(d.amount,x.cfg.cur)}</b>${rate>0?` = ${fmtU(r2(d.amount*rate))}`:''}<div class="small muted">${lr2(pct)}% на місяць · ${d.dim} днів у місяці · день отримання рахується, день повернення — ні</div>`;
+  const td=todayStr();
+  document.getElementById('int-segs').innerHTML=(d.segs.map(g=>`<div class="li"><span>${shortDate(g.from).slice(0,5)}–${shortDate(g.to).slice(0,5)}: борг ${fmt(g.owe,x.cfg.cur)} × ${g.days} дн.${g.to>td?' <span class="muted">(до кінця місяця — якщо борг не зміниться)</span>':''}</span><b>${fmt(g.v,x.cfg.cur)}</b></div>`).join('')||'<div class="li">Боргу в цьому місяці не було</div>')
+    +(x.corr||[]).map(c=>`<div class="li"><span>Коригування за ${esc(monthLabel(c.month).toLowerCase())}: після нарахування борг змінився — мало бути ${fmt(c.actual,x.cfg.cur)}, нараховано ${fmt(c.was,x.cfg.cur)}</span><b>${c.v>0?'+':'−'}${fmt(Math.abs(c.v),x.cfg.cur)}</b></div>`).join('');
+  document.getElementById('int-sum').innerHTML=`<b>Разом ${fmt(x.total,x.cfg.cur)}</b>${rate>0?` = ${fmtU(r2(x.total*rate))}`:''}<div class="small muted">${lr2(pct)}% на місяць · ${d.dim} днів у місяці · день отримання рахується, день повернення — ні. Якщо після сьогодні борг зміниться — різниця підтягнеться наступного місяця.</div>`;
 }
 function openInterest(p,M){
-  intState={inv:p.inv,month:p.month,cfg:p.cfg};
+  intState={inv:p.inv,month:p.month,cfg:p.cfg,corr:p.corr};
   const r=M.nowR(p.cfg.cur)||'';
-  openSheet('Відсотки інвестору',`<div class="hint" style="margin-bottom:8px"><b>${esc(clientName(p.inv))}</b> · ${esc(monthLabel(p.month))}<br>Кінець місяця: перевірте курс і нарахуйте відсотки.</div>
-  <div class="filters"><label>Курс ${esc(p.cfg.cur)} на кінець місяця<input id="int-rate" inputmode="decimal" value="${esc(String(r))}" data-int="1"></label><label>% на місяць<input id="int-pct" inputmode="decimal" value="${esc(String(p.cfg.pct))}" data-int="1"></label></div>
+  openSheet('Відсотки інвестору',`<div class="hint" style="margin-bottom:8px"><b>${esc(clientName(p.inv))}</b> · ${esc(monthLabel(p.month))}<br>Перевірте курс і нарахуйте відсотки за місяць.</div>
+  <div class="filters"><label>Курс ${esc(p.cfg.cur)} сьогодні<input id="int-rate" inputmode="decimal" value="${esc(String(r))}" data-int="1"></label><label>% на місяць<input id="int-pct" inputmode="decimal" value="${esc(String(p.cfg.pct))}" data-int="1"></label></div>
   <div class="list" id="int-segs" style="margin:8px 0"></div><div class="card" id="int-sum"></div>
   <div class="row-actions" style="margin-top:12px;flex-wrap:wrap"><button class="btn primary" type="button" data-act="intok">Нарахувати</button><button class="btn" type="button" data-act="intlater">Нагадати завтра</button><button class="btn" type="button" data-act="intskip">Не нараховувати цього місяця</button></div>
   <div class="small muted" style="margin-top:8px">Нараховане піде на «%%% ${esc(clientName(p.inv))}» — борг по відсотках, окремо від тіла позики. Виплата — звичайне «Клієнту» з каси на нього.</div>`);
   intRecalc();
 }
 async function interestConfirm(){
-  const x=intState;if(!x)return;if(!(x.rate>0)){toast('Вкажіть курс');return;}if(!(x.due.amount>0)){toast('Сума 0 — нараховувати нічого');return;}
+  const x=intState;if(!x)return;if(!(x.rate>0)){toast('Вкажіть курс');return;}if(!(x.total>0)){toast('Сума 0 або менше — нараховувати нічого. Натисніть «Не нараховувати цього місяця»');return;}
   if(!db)await dbReady;
   try{
     const cid=await ensureClient('%%% '+clientName(x.inv));
-    const date=lastDayOf(x.month);const id=uid();
-    const op={type:'expense',date,payVia:'client',from:null,to:null,client:cid,cur:x.cfg.cur,amount:x.due.amount,cur2:null,amount2:null,rate:x.rate,category:INT_CAT,isAsset:false,assetName:null,
-      comment:`Відсотки за ${monthLabel(x.month).toLowerCase()}: ${x.pct}% на місяць, по днях`,deleted:false,by:me.id,ts:Date.now(),editedBy:null,editedTs:null,interestFor:{client:x.inv,month:x.month}};
+    const td=todayStr();const date=td<lastDayOf(x.month)?td:lastDayOf(x.month);const id=uid();
+    const parts={[x.month]:x.due.amount};for(const c of x.corr||[])parts[c.month]=c.v;
+    const op={type:'expense',date,payVia:'client',from:null,to:null,client:cid,cur:x.cfg.cur,amount:x.total,cur2:null,amount2:null,rate:x.rate,category:INT_CAT,isAsset:false,assetName:null,
+      comment:`Відсотки за ${monthLabel(x.month).toLowerCase()}: ${x.pct}% на місяць, по днях`+((x.corr||[]).length?'; коригування: '+x.corr.map(c=>monthLabel(c.month).toLowerCase()+' '+(c.v>0?'+':'')+c.v).join(', '):''),deleted:false,by:me.id,ts:Date.now(),editedBy:null,editedTs:null,interestFor:{client:x.inv,month:x.month,pct:x.pct,parts}};
     await putOp(date,id,op);try{await logAudit('create',id,null,op);}catch(e){}
     const c=cloneCfg();c.acct=c.acct||{};c.acct.interest=Object.assign({},c.acct.interest,{[x.inv]:Object.assign({},(c.acct.interest||{})[x.inv],{pct:x.pct,from:x.cfg.from,cur:x.cfg.cur})});
     c.rates=Object.assign({},c.rates,{[x.cfg.cur]:x.rate});saveCfg(c,true);
@@ -1791,7 +1820,25 @@ onAuthStateChanged(FB.auth,u=>{
 }).catch(e=>{console.warn(e);if(!snapRestored){noDb=true;authState='in';ownerLoaded=true;ownerUid=ownerUid||'?';render(true);}});
 ['gesturestart','gesturechange','gestureend'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
 document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault();},{passive:false});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+/* Оновлення з першого разу: нова версія ставиться у фоні, і застосунок сам перезавантажується.
+   Якщо людина саме щось вводить — замість перезавантаження показуємо кнопку «Оновити». */
+if('serviceWorker' in navigator){
+  let hadCtl=!!navigator.serviceWorker.controller,reloading=false;
+  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
+    const chk=()=>reg.update().catch(()=>{});
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')chk();});
+    setInterval(chk,5*60*1000);
+  }).catch(()=>{});
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!hadCtl){hadCtl=true;return;}/* найперше встановлення — не перезавантажуємо */
+    if(reloading)return;
+    const busy=form||document.getElementById('sheet-root').innerHTML||(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName));
+    if(!busy){reloading=true;location.reload();return;}
+    if(document.getElementById('upd-bar'))return;
+    const b=document.createElement('div');b.id='upd-bar';b.className='upd-bar';b.innerHTML='Є нова версія <button type="button">Оновити</button>';
+    b.querySelector('button').onclick=()=>{reloading=true;location.reload();};document.body.appendChild(b);
+  });
+}
 setNet();
 })();
 </script>
