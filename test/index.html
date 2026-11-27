@@ -98,6 +98,7 @@ td.ind{padding-left:22px}
 tr.click{cursor:pointer}.stat.click,.hero.click{cursor:pointer}.stat.click:active,.hero.click:active{opacity:.75}tr.click:active td{background:var(--surface-2)}
 td .an{display:block;font-size:12px;color:var(--muted);font-weight:400}
 td.code{font-weight:800}
+.upd-bar{position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;background:var(--text);color:var(--bg);border-radius:14px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.3)}.upd-bar button{background:var(--bg);color:var(--text);border:0;border-radius:10px;padding:8px 14px;font-weight:800;font-size:15px}
 .fxn{display:block;font-size:12.5px;line-height:1.4;margin:4px 0 2px;font-weight:400}.fxl{display:block;margin-top:5px}.fxr{font-weight:700}
 .acl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:8px;align-items:center;margin:6px 0}.acl span{font-size:14px;overflow-wrap:anywhere}.acl select{width:100%;min-width:0}.acc-sub{display:block;margin:14px 0 4px}
 table.osv{font-size:13px}table.osv th,table.osv td{padding:8px 6px}table.osv th:first-child,table.osv td:first-child{padding-left:10px}table.osv th:last-child,table.osv td:last-child{padding-right:10px}
@@ -306,7 +307,7 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 20</div>
+<div class="ver" id="ver">версія 21</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -784,6 +785,17 @@ const GH_API='https://api.github.com/repos/BazaService/bazaservice.github.io/act
 function ghToken(){try{return localStorage.getItem('bs.ghtoken')||'';}catch(e){return '';}}
 async function ghFetch(path,opt){return fetch(GH_API+path,Object.assign({headers:{Authorization:'Bearer '+ghToken(),Accept:'application/vnd.github+json'}},opt||{}));}
 function promoteSay(m,done){promoteMsg=m;promoteDone=!!done;renderTestBar();}
+/* Чекаємо, поки GitHub опублікує робочу версію, і лише тоді кажемо «готово» */
+async function waitLive(){
+  const want=(document.getElementById('ver')||{}).textContent||'';
+  for(let i=0;i<36;i++){
+    promoteSay('⏳ Перенесено. GitHub публікує сайт — зазвичай 1–2 хвилини…');
+    try{const r=await fetch('../index.html?t='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/id="ver">([^<]*)</);
+      if(m&&m[1]===want)return promoteSay(`✅ Готово: робоча — ${esc(want)}, уже на сайті. Відкрийте робочий застосунок — він оновиться сам, з першого разу.`,true);}catch(e){}
+    await new Promise(f=>setTimeout(f,5000));
+  }
+  promoteSay('✅ Перенесено. Сайт оновлюється довше, ніж зазвичай — відкрийте робочий застосунок за кілька хвилин, він оновиться сам.',true);
+}
 async function runPromote(){
   promoteAsk='run';promoteSay('⏳ Запускаю перенесення…');
   const since=Date.now()-60000;
@@ -797,7 +809,7 @@ async function runPromote(){
       const run=((await q.json()).workflow_runs||[])[0];
       if(!run||Date.parse(run.created_at)<since){promoteSay('⏳ Чекаю, поки GitHub почне…');continue;}
       if(run.status!=='completed'){promoteSay('⏳ Перевіряю еталон і переношу… (зазвичай до хвилини)');continue;}
-      if(run.conclusion==='success')return promoteSay('✅ Перенесено. Через 1–2 хвилини відкрийте робочий застосунок, закрийте і відкрийте ще раз.',true);
+      if(run.conclusion==='success')return waitLive();
       return promoteSay('❌ Не перенесено: перевірка еталоном не пройшла або сталася помилка. Робоча версія не змінилась. Напишіть Claude.',true);
     }
     promoteSay('⏳ GitHub довго відповідає. Перевірте пізніше через «Деталі».',true);
@@ -1808,7 +1820,25 @@ onAuthStateChanged(FB.auth,u=>{
 }).catch(e=>{console.warn(e);if(!snapRestored){noDb=true;authState='in';ownerLoaded=true;ownerUid=ownerUid||'?';render(true);}});
 ['gesturestart','gesturechange','gestureend'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
 document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault();},{passive:false});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+/* Оновлення з першого разу: нова версія ставиться у фоні, і застосунок сам перезавантажується.
+   Якщо людина саме щось вводить — замість перезавантаження показуємо кнопку «Оновити». */
+if('serviceWorker' in navigator){
+  let hadCtl=!!navigator.serviceWorker.controller,reloading=false;
+  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
+    const chk=()=>reg.update().catch(()=>{});
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')chk();});
+    setInterval(chk,5*60*1000);
+  }).catch(()=>{});
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!hadCtl){hadCtl=true;return;}/* найперше встановлення — не перезавантажуємо */
+    if(reloading)return;
+    const busy=form||document.getElementById('sheet-root').innerHTML||(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName));
+    if(!busy){reloading=true;location.reload();return;}
+    if(document.getElementById('upd-bar'))return;
+    const b=document.createElement('div');b.id='upd-bar';b.className='upd-bar';b.innerHTML='Є нова версія <button type="button">Оновити</button>';
+    b.querySelector('button').onclick=()=>{reloading=true;location.reload();};document.body.appendChild(b);
+  });
+}
 setNet();
 })();
 </script>
