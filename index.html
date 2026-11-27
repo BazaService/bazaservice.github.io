@@ -306,7 +306,7 @@ tr.badrow td{background:var(--out-soft);color:var(--out);font-weight:700}
   <a href="#zvit" data-tab="zvit"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Звіт<span class="badge" id="badge" hidden></span></a>
 </div></nav>
 <div id="sheet-root"></div>
-<div class="ver" id="ver">версія 16</div>
+<div class="ver" id="ver">версія 19</div>
 
 <script type="module">
 let initializeApp,getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,fdoc,fcol,setDoc,getDoc,fsnap,writeBatch,firebaseConfig;
@@ -430,7 +430,7 @@ function model(){
     const tgt=v>0.004?owedCur:v<-0.004?oweCur:null;
     if(tgt)for(const c in cli[k]){const a=v>0?cli[k][c]:-cli[k][c];tgt[c]=r2((tgt[c]||0)+a);}}
   const balance=r2(cashU+owedToMe-iOwe);
-  const pl=o=>{const u=(+o.amount||0)*opR(o.cur,o.date);return o.type==='income'?u:o.type==='expense'?-u:0;};
+  const pl=o=>{const u=(+o.amount||0)*rateOf(o,opR);return o.type==='income'?u:o.type==='expense'?-u:0;};
   const months={};let plAll=0;
   for(const o of ops){if(o.type!=='income'&&o.type!=='expense')continue;const v=pl(o);plAll+=v;const m=o.date.slice(0,7);const x=months[m]=months[m]||{inc:0,exp:0,oz:0};if(o.type==='income')x.inc+=v;else if(o.isAsset)x.oz+=-v;else x.exp+=-v;}
   plAll=r2(plAll);
@@ -455,16 +455,52 @@ const ACC_ORDER=['10','20','23','301','302','31','36','371','372','377','40','44
 const ACC_SEC={a:'Активи',p:'Капітал і зобов\'язання',i:'Доходи',e:'Витрати'};
 const EXP_ACCS=['91','92','93','949','951','98','90'];
 const INC_ACCS=['703','702','719'];
-const CLIENT_KINDS={other:['Інший','377'],investor:['Інвестор','60'],buyer:['Покупець','36'],supplier:['Постачальник','63'],employee:['Працівник','372'],bank:['Банк','31']};
+const CLIENT_KINDS={other:['Інший','377'],investor:['Інвестор','60'],interest:['Відсотки інвестору','684'],buyer:['Покупець','36'],supplier:['Постачальник','63'],employee:['Працівник','372'],bank:['Банк','31']};
 const ORGS=[['cash','Готівка'],['tov','ТОВ «БАЗА СЕРВІС»'],['fop3','ФОП 3 група'],['fop2','ФОП 2 група']];
 const OZ_CAT='Основні засоби';
 function acctCfg(){return C().acct||{};}
 function clientKind(id){const k=(acctCfg().clients||{})[id];if(CLIENT_KINDS[k])return k;
   /* Без налаштування — за назвою: «інвестор…» → Інвестор, «банк…» → Банк */
   const n=String((clients[id]&&clients[id].name)||(C().legacyNames||{})[id]||'').toLowerCase();
-  return /інвестор/.test(n)?'investor':/банк/.test(n)?'bank':'other';}
+  return /^\s*%%%/.test(n)?'interest':/інвестор/.test(n)?'investor':/банк/.test(n)?'bank':'other';}
 function clientAcc(id){return CLIENT_KINDS[clientKind(id)][1];}
-function expAcc(cat){const m=(acctCfg().exp||{})[cat];return ACC[m]?m:(cat===OZ_CAT||cat==='Інше'?'949':'91');}
+function expAcc(cat){const m=(acctCfg().exp||{})[cat];return ACC[m]?m:(cat===INT_CAT?'951':cat===OZ_CAT||cat==='Інше'?'949':'91');}
+const INT_CAT='Відсотки інвестору';
+/* Курс операції: якщо в операції вказано свій курс (напр. нарахування відсотків за курсом на кінець місяця) — він, інакше курс дня */
+function rateOf(o,opR){return o.type!=='exchange'&&+o.rate>0&&o.cur!==BASE?+o.rate:opR(o.cur,o.date);}
+/* ---------- Відсотки інвесторам ---------- */
+const INT_DEFAULT={pct:1,from:'2026-11-01'};
+function interestCfg(id){const x=(acctCfg().interest||{})[id]||{};return {pct:x.pct!=null?+x.pct:INT_DEFAULT.pct,from:x.from||INT_DEFAULT.from,cur:x.cur||'USD'};}
+function daysIn(m){const [y,mm]=m.split('-').map(Number);return new Date(y,mm,0).getDate();}
+function lastDayOf(m){return m+'-'+String(daysIn(m)).padStart(2,'0');}
+function nextMonth(m){let [y,mm]=m.split('-').map(Number);mm++;if(mm>12){mm=1;y++;}return y+'-'+String(mm).padStart(2,'0');}
+/* Відсотки за місяць по днях: щодня борг на кінець дня × % / днів у місяці.
+   День отримання грошей рахується, день повернення — ні. */
+function interestDue(ops,inv,m,pct,from,cur){
+  const dim=daysIn(m);const segs=[];let total=0;let bal=0;const byDay={};
+  for(const o of ops){if(o.client!==inv||o.cur!==cur)continue;for(const [k,c,a] of clientEffects(o)){if(k===inv&&c===cur)(byDay[o.date]=byDay[o.date]||[]).push(a);}}
+  const dates=Object.keys(byDay).sort();let i=0;
+  const start=m+'-01';while(i<dates.length&&dates[i]<start){for(const a of byDay[dates[i]])bal+=a;i++;}
+  for(let d=1;d<=dim;d++){const day=m+'-'+String(d).padStart(2,'0');
+    while(i<dates.length&&dates[i]<=day){for(const a of byDay[dates[i]])bal+=a;i++;}
+    if(day<from)continue;
+    const owe=Math.max(0,r2(-bal));const v=owe*pct/100/dim;total+=v;
+    const last=segs[segs.length-1];if(last&&last.owe===owe&&last.to===m+'-'+String(d-1).padStart(2,'0')){last.to=day;last.days++;last.v+=v;}
+    else segs.push({from:day,to:day,owe,days:1,v});}
+  for(const x of segs)x.v=r2(x.v);
+  return {amount:r2(total),segs:segs.filter(x=>x.owe>0),dim};
+}
+/* Які місяці ще не нараховані: від дати початку до місяця, останній день якого вже настав */
+function interestPending(ops,today){
+  const out=[];const done={};const skip=acctCfg().interestSkip||{};
+  for(const o of ops)if(o.interestFor)done[o.interestFor.client+'|'+o.interestFor.month]=1;
+  for(const id of Object.keys(clients)){if(clients[id].archived||clientKind(id)!=='investor')continue;
+    const c=interestCfg(id);if(!(c.pct>0))continue;
+    for(let m=c.from.slice(0,7);lastDayOf(m)<=today;m=nextMonth(m)){
+      if(done[id+'|'+m]||skip[id+'|'+m])continue;
+      const d=interestDue(ops,id,m,c.pct,c.from,c.cur);if(d.amount>0)out.push({inv:id,month:m,cfg:c,due:d});}}
+  return out;
+}
 function incAcc(cat){const m=(acctCfg().inc||{})[cat];return ACC[m]?m:'719';}
 function boxOrg(id){const b=C().boxes.find(x=>x.id===id);return b&&b.org||'cash';}
 function cashAcc(cur){return cur===BASE?'301':'302';}
@@ -512,7 +548,7 @@ function ledger(ops,nowR,opR){
   const cli=(id,cur,a)=>side(clientAcc(id),'cli:'+id,cur,a);
   const lotLines=(used,cur)=>used.map(l=>`${l.src} — з них ${lf(r2(l.q),cur)} по ${lr(l.r)} = ${lf(r2(l.q*l.r),BASE)}`);
   for(const o of ops){
-    const a=+o.amount||0,day=opR(o.cur,o.date),u=a*day;
+    const a=+o.amount||0,day=rateOf(o,opR),u=a*day;
     const cat=o.type==='expense'&&o.isAsset?OZ_CAT:(o.category||(o.type==='income'?'Інший дохід':'Інше'));
     const exp=side(expAcc(cat),'cat:'+cat,BASE,u),inc=side(incAcc(cat),'cat:'+cat,BASE,u);
     let dt,kt,a2=a,cur2=o.cur;
@@ -591,8 +627,8 @@ function fxToday(ops,nowR,opR){
     const add=(c,v)=>{if(c&&c!==BASE)d[c]=(d[c]||0)+v;};
     let pl=0;
     if(o.type==='exchange'){add(o.cur,-a);add(o.cur2,+(+o.amount2||0));}
-    else if(o.type==='income'){add(o.cur,a);if(o.cur!==BASE)pl=a*opR(o.cur,o.date);}
-    else if(o.type==='expense'){add(o.cur,-a);if(o.cur!==BASE)pl=-a*opR(o.cur,o.date);}
+    else if(o.type==='income'){add(o.cur,a);if(o.cur!==BASE)pl=a*rateOf(o,opR);}
+    else if(o.type==='expense'){add(o.cur,-a);if(o.cur!==BASE)pl=-a*rateOf(o,opR);}
     else continue;
     const cs=Object.keys(d).filter(c=>d[c]);if(!cs.length)continue;
     let now=0;for(const c of cs)now+=d[c]*nowR(c);
@@ -600,10 +636,29 @@ function fxToday(ops,nowR,opR){
     let uah=0;if(o.type==='exchange'){if(o.cur===BASE)uah=-a;if(o.cur2===BASE)uah+=+o.amount2||0;}
     const v=r2(o.type==='exchange'?uah+now:now-pl);
     const c=cs[0],q=Math.abs(d[c]);
-    const rate=o.type==='exchange'&&(o.cur===BASE||o.cur2===BASE)?Math.abs(uah)/q:opR(c,o.date);
+    const rate=o.type==='exchange'&&(o.cur===BASE||o.cur2===BASE)?Math.abs(uah)/q:rateOf(o,opR);
     rows.push({o,cur:c,q,rate,now:nowR(c),v,kind:o.type==='exchange'?(d[c]<0?'sell':'buy'):o.type});
   }
   return rows;
+}
+/* Контрольні суми: те саме, пораховане двома різними способами. Різниця завжди має бути 0.
+   Рахуються і на еталоні, і на справжніх даних. */
+function controlSums(M){
+  const O=osv(M.posts,'','','','');const b=a=>O[a]?O[a].close:0;
+  const cliAccs=[...new Set(Object.values(CLIENT_KINDS).map(x=>x[1]))];
+  let dt=0,kt=0,sum=0,pl=0;for(const k in O){dt+=O[k].dt;kt+=O[k].kt;sum+=O[k].close;if(/^[79]/.test(k)&&k!=='714'&&k!=='945')pl-=O[k].close;}
+  let ft=0;for(const r of fxToday(M.ops,M.nowR,M.opR))ft+=r.v;
+  const L=[
+    ['Каси на екрані − каси за рахунками 301 і 302',M.cashU-(b('301')+b('302'))],
+    ['Борги клієнтів на екрані − борги за рахунками клієнтів',(M.owedToMe-M.iOwe)-cliAccs.reduce((t,a)=>t+b(a),0)],
+    ['P&L на екрані − P&L за рахунками',M.plAll-pl],
+    ['Курсова різниця на екрані − за рахунками 714 і 945',M.fxDiff+(b('714')+b('945'))],
+    ['Курсова різниця на екрані − таблиця «з сьогоднішнім курсом»',M.fxDiff-ft],
+    ['Оборот Дебет − оборот Кредит',dt-kt],
+    ['Сума всіх сальдо',sum]
+  ];
+  for(const c in M.cash)if(c!==BASE){const a=O[cashAcc(c)];L.push([`Каси в ${c} на екрані − на рахунку 302`,M.cash[c]-(a&&a.cur[c]||0)]);}
+  return L.map(([label,v])=>({label,v:r2(v)}));
 }
 /* Оборотно-сальдова відомість. from/to — межі періоду (рядки YYYY-MM-DD, '' — без межі).
    by: 'acc' — по рахунках, або назва рахунку — по аналітиці цього рахунку.
@@ -700,6 +755,7 @@ function render(full){
   }
   const M=model();curM=M;
   document.getElementById('dyn').innerHTML=ui.tab==='kasy'?kasyBody(M):ui.tab==='panel'?panelBody(M):ui.tab==='kliienty'?clientsBody(M):ui.tab==='zhurnal'?journalBody(M):ui.tab==='zvit'?reportBody(M):ui.tab==='zminy'?auditBody():ui.tab==='rakhunky'?accBody(M):ui.tab==='perevirka'?perevirkaBody(M):ui.tab==='moia'?cashierBody(M):settingsBody(M);
+  maybeInterestPrompt(M);
 }
 function cashierBody(M){
   const b=myBox();const box=C().boxes.find(x=>x.id===b);
@@ -754,15 +810,16 @@ function perevirkaBody(M){
   const month=(cfg&&cfg.etalonMonth)||thisMonth();
   let ok=0,rows='',g='';
   for(const x of ETA.EXPECTED){
-    const a=ETA.actualValue(M,{currentRate,osv,month},x.key);
+    const a=ETA.actualValue(M,{currentRate,osv,month,interestDue,interestPending},x.key);
     const good=a!=null&&Math.abs(a-x.value)<0.005;if(good)ok++;
     if(x.group!==g){g=x.group;rows+=`<tr class="sec"><td colspan="3">${esc(g)}</td></tr>`;}
     const f=v=>v==null?'—':(x.cur?fmt(v,x.cur):String(v));
     rows+=`<tr class="${good?'':'badrow'}"><td>${good?'✅':'❌'} ${esc(x.label)}</td><td>${f(x.value)}</td><td>${f(a)}</td></tr>`;
   }
   const n=ETA.EXPECTED.length,all=ok===n;
+  const cs=controlSums(M),csOk=cs.every(x=>Math.abs(x.v)<0.01);
   const stale=ETA.ETALON_VER&&(cfg&&cfg.etalonVer||1)<ETA.ETALON_VER;
-  return (stale?`<div class="warn-card"><b>Еталон оновився.</b> У тестовій базі ще старі еталонні дані, тому частина рядків червона. Натисніть «Скинути до еталону» вгорі.</div>`:'')+`<div class="card chk-sum ${all?'good':'badc'}"><b>${all?'✅ Усе збігається з еталоном':'❌ Є розбіжності з еталоном'}</b><div class="small">${ok} з ${n} показників правильні</div></div>
+  return (stale?`<div class="warn-card"><b>Еталон оновився.</b> У тестовій базі ще старі еталонні дані, тому частина рядків червона. Натисніть «Скинути до еталону» вгорі.</div>`:'')+controlCard(cs,csOk)+`<h2>Еталонні цифри</h2><div class="card chk-sum ${all?'good':'badc'}"><b>${all?'✅ Усе збігається з еталоном':'❌ Є розбіжності з еталоном'}</b><div class="small">${ok} з ${n} показників правильні</div></div>
   <div class="legend" style="margin-bottom:10px">Якщо ви вносили свої тестові операції, розбіжності — це нормально. Натисніть «Скинути до еталону» вгорі, і все має знову стати зеленим.</div>
   <div class="tbl-wrap"><table><thead><tr><th>Показник</th><th>Очікується</th><th>Є</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -1054,6 +1111,7 @@ function accBody(M){
     if(only){let tc=0;for(const k of codes)tc+=O[k].close;h+=`<div class="card" style="margin-bottom:10px"><b>${esc(only[0])} · ${esc(per)}: ${fmtU(a.only==='pl'||a.only==='inc'||a.only==='fx'?-tc:tc,a.only!=='cash'&&a.only!=='exp')}</b><div class="small muted">${a.only==='pl'||a.only==='fx'?'Доходи (кредит) мінус витрати (дебет). ':''}Натисніть рахунок, щоб розкрити.</div></div>`;}
     const ok=Math.abs(r2(t.dt-t.kt))<0.01;
     h+=`<h2>Оборотно-сальдова відомість · ${esc(per)}</h2><div class="tbl-wrap"><table class="osv"><thead>${head}</thead><tbody>${rows}<tr class="total"><td>Разом</td><td>${fmtN(t.dt)}</td><td>${fmtN(t.kt)}</td><td></td></tr></tbody></table></div>`;
+    if(!only&&!a.org){const cs=controlSums(M),cok=cs.every(x=>Math.abs(x.v)<0.01);h+=`<details class="okline"><summary>${cok?'✅ Контрольні суми: усі 0 — рахунки збігаються з екранами «Гроші», «Каси», «Клієнти».':'❌ Контрольні суми: є розбіжність — напишіть Claude.'}</summary>${controlCard(cs,cok)}</details>`;}
     if(!only)h+=`<div class="okline">${ok?'✅ Дебет = Кредит: усе сходиться.':'❌ Дебет ≠ Кредит — помилка в розрахунках, напишіть Claude.'} Дт — дебетове сальдо (актив, витрата), Кт — кредитове (борг, дохід). Натисніть рахунок, щоб розкрити.</div>`;
     return h;
   }
@@ -1129,6 +1187,53 @@ function fxScreen(M){
   return h;
 }
 
+function controlCard(cs,ok){
+  return `<div class="card chk-sum ${ok?'good':'badc'}" style="margin-top:10px"><b>${ok?'✅ Контрольні суми: усі 0':'❌ Контрольні суми: є розбіжність'}</b><div class="small">Те саме, пораховане двома різними способами. Різниця завжди має бути 0.</div></div>
+  <div class="tbl-wrap" style="margin-bottom:12px"><table class="osv"><tbody>${cs.map(x=>{const g=Math.abs(x.v)<0.01;return `<tr class="${g?'':'badrow'}"><td>${g?'✅':'❌'} ${esc(x.label)}</td><td>${g?'0':fmtU(x.v,true)}</td></tr>`;}).join('')}</tbody></table></div>`;
+}
+
+/* ---------- Вікно: відсотки інвестору в кінці місяця ---------- */
+let intShown='',intState=null;const intDone=new Set();
+function todayStr(){const t=new Date();return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');}
+function maybeInterestPrompt(M){
+  if(!isOwner||!db||!cfgLoaded||!daysLoaded||!clientsLoaded||document.getElementById('sheet-root').innerHTML||form)return;
+  const td=todayStr();if(ls('bs.intSnooze')===td)return;
+  const p=interestPending(M.ops,td).filter(x=>!intDone.has(x.inv+'|'+x.month))[0];if(!p)return;
+  const key=p.inv+'|'+p.month;if(intShown===key)return;intShown=key;
+  openInterest(p,M);
+}
+function intRecalc(){
+  const x=intState;if(!x)return;const pct=num(document.getElementById('int-pct').value),rate=num(document.getElementById('int-rate').value);
+  const d=interestDue(curM.ops,x.inv,x.month,pct,x.cfg.from,x.cfg.cur);x.pct=pct;x.rate=rate;x.due=d;
+  const lr2=v=>(Math.round(v*100)/100).toLocaleString('uk-UA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('int-segs').innerHTML=d.segs.map(g=>`<div class="li"><span>${shortDate(g.from).slice(0,5)}–${shortDate(g.to).slice(0,5)}: борг ${fmt(g.owe,x.cfg.cur)} × ${g.days} дн.</span><b>${fmt(g.v,x.cfg.cur)}</b></div>`).join('')||'<div class="li">Боргу в цьому місяці не було</div>';
+  document.getElementById('int-sum').innerHTML=`<b>${fmt(d.amount,x.cfg.cur)}</b>${rate>0?` = ${fmtU(r2(d.amount*rate))}`:''}<div class="small muted">${lr2(pct)}% на місяць · ${d.dim} днів у місяці · день отримання рахується, день повернення — ні</div>`;
+}
+function openInterest(p,M){
+  intState={inv:p.inv,month:p.month,cfg:p.cfg};
+  const r=M.nowR(p.cfg.cur)||'';
+  openSheet('Відсотки інвестору',`<div class="hint" style="margin-bottom:8px"><b>${esc(clientName(p.inv))}</b> · ${esc(monthLabel(p.month))}<br>Кінець місяця: перевірте курс і нарахуйте відсотки.</div>
+  <div class="filters"><label>Курс ${esc(p.cfg.cur)} на кінець місяця<input id="int-rate" inputmode="decimal" value="${esc(String(r))}" data-int="1"></label><label>% на місяць<input id="int-pct" inputmode="decimal" value="${esc(String(p.cfg.pct))}" data-int="1"></label></div>
+  <div class="list" id="int-segs" style="margin:8px 0"></div><div class="card" id="int-sum"></div>
+  <div class="row-actions" style="margin-top:12px;flex-wrap:wrap"><button class="btn primary" type="button" data-act="intok">Нарахувати</button><button class="btn" type="button" data-act="intlater">Нагадати завтра</button><button class="btn" type="button" data-act="intskip">Не нараховувати цього місяця</button></div>
+  <div class="small muted" style="margin-top:8px">Нараховане піде на «%%% ${esc(clientName(p.inv))}» — борг по відсотках, окремо від тіла позики. Виплата — звичайне «Клієнту» з каси на нього.</div>`);
+  intRecalc();
+}
+async function interestConfirm(){
+  const x=intState;if(!x)return;if(!(x.rate>0)){toast('Вкажіть курс');return;}if(!(x.due.amount>0)){toast('Сума 0 — нараховувати нічого');return;}
+  if(!db)await dbReady;
+  try{
+    const cid=await ensureClient('%%% '+clientName(x.inv));
+    const date=lastDayOf(x.month);const id=uid();
+    const op={type:'expense',date,payVia:'client',from:null,to:null,client:cid,cur:x.cfg.cur,amount:x.due.amount,cur2:null,amount2:null,rate:x.rate,category:INT_CAT,isAsset:false,assetName:null,
+      comment:`Відсотки за ${monthLabel(x.month).toLowerCase()}: ${x.pct}% на місяць, по днях`,deleted:false,by:me.id,ts:Date.now(),editedBy:null,editedTs:null,interestFor:{client:x.inv,month:x.month}};
+    await putOp(date,id,op);try{await logAudit('create',id,null,op);}catch(e){}
+    const c=cloneCfg();c.acct=c.acct||{};c.acct.interest=Object.assign({},c.acct.interest,{[x.inv]:Object.assign({},(c.acct.interest||{})[x.inv],{pct:x.pct,from:x.cfg.from,cur:x.cfg.cur})});
+    c.rates=Object.assign({},c.rates,{[x.cfg.cur]:x.rate});saveCfg(c,true);
+    intDone.add(x.inv+'|'+x.month);intState=null;intShown='';closeSheet();toast('Відсотки нараховано');
+  }catch(e){toast('Не вдалося зберегти. Перевірте інтернет.');}
+}
+
 function accSettings(){
   if(!canAdmin)return '';const c=C();const ac=c.acct||{};
   const sel=(attr,key,val,opts)=>`<select data-${attr}="${esc(key)}" aria-label="Рахунок для ${esc(key)}">${opts.map(([v,l])=>opt(v,l,val)).join('')}</select>`;
@@ -1136,6 +1241,8 @@ function accSettings(){
   let h=`<h2>Облік: рахунки</h2><div class="card"><div class="hint" style="margin-bottom:8px">Куди застосунок записує кожну операцію. Можна змінити будь-коли — усі звіти, і старі теж, перерахуються самі.</div>`;
   h+=`<b class="small acc-sub">Каси → організація</b><div>${c.boxes.filter(b=>!b.archived).map(b=>`<div class="acl"><span>${esc(b.name)}</span>${sel('borg',b.id,b.org||'cash',ORGS)}</div>`).join('')}</div>`;
   h+=`<b class="small acc-sub">Клієнти → тип</b><div>${clientList().map(x=>`<div class="acl"><span>${esc(x.name)}</span>${sel('ckind',x.id,clientKind(x.id),Object.keys(CLIENT_KINDS).map(k=>[k,CLIENT_KINDS[k][0]+' ('+CLIENT_KINDS[k][1]+')']))}</div>`).join('')}</div>`;
+  const invs=clientList().filter(x=>clientKind(x.id)==='investor');
+  if(invs.length)h+=`<b class="small acc-sub">Відсотки інвесторам (% на місяць, з якої дати)</b><div>${invs.map(x=>{const c=interestCfg(x.id);return `<div class="acl"><span>${esc(x.name)}</span><span style="display:flex;gap:6px"><input inputmode="decimal" style="width:70px" value="${esc(String(c.pct))}" data-ipct="${esc(x.id)}" aria-label="Відсоток на місяць"><input type="date" value="${esc(c.from)}" data-ifrom="${esc(x.id)}" aria-label="З дати"></span></div>`;}).join('')}</div>`;
   h+=`<b class="small acc-sub">Види витрат → рахунок</b><div>${[...c.categories,OZ_CAT].map(k=>`<div class="acl"><span>${esc(k)}</span>${sel('eacc',k,expAcc(k),accOpts(EXP_ACCS))}</div>`).join('')}</div>`;
   h+=`<b class="small acc-sub">Види доходу → рахунок</b><div>${c.incomeCategories.map(k=>`<div class="acl"><span>${esc(k)}</span>${sel('iacc',k,incAcc(k),accOpts(INC_ACCS))}</div>`).join('')}</div>`;
   return h+`</div>`;
@@ -1378,6 +1485,7 @@ function buildOp(prev,clientId){
   if(t==='exchange'){op.cur2=s.cur2;op.amount2=r2(num(s.amount2));op.rate=fxRate();}
   if(r.isAsset){op.isAsset=true;op.assetName=s.assetName.trim();op.category='Основні засоби';}
   else if(t==='expense'||t==='income')op.category=r.category;
+  if(prev&&prev.interestFor&&t==='expense'){op.interestFor=prev.interestFor;op.rate=prev.rate;}
   return op;
 }
 async function ensureClient(name){
@@ -1480,6 +1588,9 @@ document.addEventListener('click',async e=>{
     case 'goaudit':location.hash='#zminy';break;
     case 'accgo':{const [acc,an,m,only]=v.split('|');ui.acc={month:m||'',org:'',acc:acc||'',an:an||'',only:only||'',fxDetail:false};if(ui.tab==='rakhunky')render(true);else location.hash='#rakhunky';break;}
     case 'accopen':ui.acc.acc=v;ui.acc.an='';if(!v)ui.acc.only='';render();window.scrollTo(0,0);break;
+    case 'intok':interestConfirm();break;
+    case 'intlater':ls('bs.intSnooze',todayStr());intState=null;closeSheet();toast('Нагадаю завтра');break;
+    case 'intskip':{const x=intState;if(x){const c=cloneCfg();c.acct=c.acct||{};c.acct.interestSkip=Object.assign({},c.acct.interestSkip,{[x.inv+'|'+x.month]:true});saveCfg(c,true);intDone.add(x.inv+'|'+x.month);}intState=null;intShown='';closeSheet();toast('Цього місяця не нараховуємо');break;}
     case 'fxdet':ui.acc.fxDetail=v==='1';render();window.scrollTo(0,0);break;
     case 'acconly':ui.acc.acc='';ui.acc.an='';ui.acc.only=v;render();window.scrollTo(0,0);break;
     case 'anopen':ui.acc.an=v;render();window.scrollTo(0,0);break;
@@ -1515,6 +1626,10 @@ document.addEventListener('input',e=>{
   if(t.dataset.eod){ui.eodDate=t.value;render();return;}
   if(t.dataset.rf){ui.rep[t.dataset.rf]=t.value;render(true);return;}
   if(t.dataset.af){ui.acc[t.dataset.af]=t.value;render(true);return;}
+  if(t.dataset.int){intRecalc();return;}
+  if(canAdmin&&(t.dataset.ipct||t.dataset.ifrom)){const id=t.dataset.ipct||t.dataset.ifrom;const c=cloneCfg();c.acct=c.acct||{};const cur=Object.assign({},interestCfg(id),(c.acct.interest||{})[id]);
+    if(t.dataset.ipct){const v=num(t.value);if(!(v>=0))return;cur.pct=v;}else{if(!t.value)return;cur.from=t.value;}
+    c.acct.interest=Object.assign({},c.acct.interest,{[id]:cur});saveCfg(c);return;}
   if(canAdmin&&(t.dataset.borg||t.dataset.ckind||t.dataset.eacc||t.dataset.iacc)){const c=cloneCfg();c.acct=c.acct||{};
     if(t.dataset.borg){const b=c.boxes.find(x=>x.id===t.dataset.borg);if(b)b.org=t.value;}
     else{const g=t.dataset.ckind?'clients':t.dataset.eacc?'exp':'inc';const k=t.dataset.ckind||t.dataset.eacc||t.dataset.iacc;c.acct[g]=Object.assign({},c.acct[g],{[k]:t.value});}
